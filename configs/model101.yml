@@ -1,6 +1,9 @@
 
 name: 'model101'
-n_process: 0
+n_process: 2
+
+raw_len: &raw_len 150_000
+seq_len: &seq_len 4096
 
 env:
   root_path: '/media/wb/backup/work/LANL-Earthquake-Prediction'
@@ -9,8 +12,9 @@ env:
 
 model:
   name: 'WaveNet'
-  n_stacks: 1
+  n_stacks: 2
   layers_per_stack: 12
+  #layers_per_stack: 10
   kernel_size: 2
   n_features: 32
   n_blk_res: 16
@@ -19,14 +23,16 @@ model:
   init_type: 'xavier_normal'
   act_type: 'tanh'
   wn_dropout_keep: 1.0
+  norm_type: 'batch_norm'
   fc_dropout_keep: 0.5
   use_weight_norm: False
 
 opt:
   type: 'Adam'
+  lr: !!float 1e-3
   beta1: 0.9
   beta2: 0.999
-  weight_decay: 0.0
+  weight_decay: !!float 1e-4
   epsilon: !!float 1e-8
 
 trn:
@@ -44,17 +50,19 @@ trn:
   max_lr: !!float 1e-3
   #true_wd: False
   #wd: !!float 3e-5
-  new_whale: 0
-  use_flip: 0
-  cal_score: 'mapk_known'
-  find_lr: False
+  find_lr: 0
+  epoch_len: 50_000
 
 vld:
-  n_known: 1000
-  n_unknown: -1
-  seed: 97
-  cal_metric_once: True
-  batch_size: 32
+  batch_size: 128
+  epoch_len: 25_000
+
+ds:
+  fix_seed: 1
+  k_fold: 5
+  fold: 4
+  raw_len: *raw_len
+  seq_len: *seq_len
 
 loss:
   name: 'MAE'

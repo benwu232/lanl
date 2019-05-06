@@ -32,43 +32,62 @@ if DBG:
 def run(config):
     config.env.update(init_env(config))
     df = load_dump(config.env.pdir.data/f'train_df.pkl')
-    vld_range = split_ds(df)
-    seq_len = 15_0000
+    #extend_df(df)
+    #vld_range = split_ds(df)
     ds_len = len(df)
-    k_fold = 5
-    fold = 4
-    batch_len = 100_0000
 
-    trn_ds = QuakeDataSet(df=df, seq_len=seq_len)
-    trn_sampler = BatchSamplerTrn(ds_len,
-                                  k_fold=k_fold,
-                                  fold=fold,
-                                  batch_size=config.trn.batch_size,
-                                  batch_len=batch_len,
-                                  )
+    trn_ds = QuakeDataSet(df=df, mode='trn', config=config)
+    trn_sampler = RandomSamplerKFoldTrn(ds_len, config.ds.k_fold, config.ds.fold, n_samples=config.trn.epoch_len, offset=config.ds.raw_len)
     trn_dl = DataLoader(
         trn_ds,
-        #batch_size=config.trn.batch_size,
-        batch_sampler=trn_sampler,
+        batch_size=config.trn.batch_size,
+        #shuffle=True,
+        drop_last=True,
+        sampler=trn_sampler,
         pin_memory=True,
         num_workers=config.n_process
     )
+    #trn_sampler = BatchSamplerTrn(ds_len,
+    #                              k_fold=k_fold,
+    #                              fold=fold,
+    #                              batch_size=config.trn.batch_size,
+    #                              batch_len=batch_len,
+    #                              )
+    #trn_dl = DataLoader(
+    #    trn_ds,
+    #    batch_size=config.trn.batch_size,
+    #
+    #    batch_sampler=trn_sampler,
+    #    pin_memory=True,
+    #    num_workers=config.n_process
+    #)
 
 
-    vld_ds = QuakeDataSet(df=df, seq_len=seq_len)
-    vld_sampler = BatchSamplerVld(ds_len,
-                                  k_fold=k_fold,
-                                  fold=fold,
-                                  batch_size=config.vld.batch_size,
-                                  batch_len=100_000,
-                                 )
+    vld_ds = QuakeDataSet(df=df, mode='vld', config=config)
+    vld_sampler = RandomSamplerKFoldVld(ds_len, config.ds.k_fold, config.ds.fold, n_samples=config.vld.epoch_len, offset=config.ds.raw_len)
     vld_dl = DataLoader(
         vld_ds,
-        #batch_size=config.trn.batch_size,
-        batch_sampler=vld_sampler,
+        batch_size=config.vld.batch_size,
+        #shuffle=True,
+        drop_last=True,
+        sampler=vld_sampler,
         pin_memory=True,
         num_workers=config.n_process
     )
+
+    #vld_sampler = BatchSamplerVld(ds_len,
+    #                              k_fold=k_fold,
+    #                              fold=fold,
+    #                              batch_size=config.vld.batch_size,
+    #                              batch_len=100_000,
+    #                             )
+    #vld_dl = DataLoader(
+    #    vld_ds,
+    #    #batch_size=config.trn.batch_size,
+    #    batch_sampler=vld_sampler,
+    #    pin_memory=True,
+    #    num_workers=config.n_process
+    #)
 
     #data_bunch = ImageDataBunch(trn_dl, vld_dl, test_dl=tst_dl, device=device)
     data_bunch = DataBunch(trn_dl, vld_dl, device=device)
@@ -87,19 +106,34 @@ def run(config):
     loss_fn = set_loss_fn('L1Loss')
 
 
-    thfra = TorchFrame(config)
-    thfra.fit()
-    exit()
+    #thfra = TorchFrame(config)
+    #thfra.fit()
+    #exit()
 
 
     learner = Learner(data_bunch,
                       model,
+                      opt_func=partial(Adam, betas=(config.opt.beta1, config.opt.beta2), weight_decay=config.opt.weight_decay),
                       loss_func=loss_fn,
                       true_wd=False,
                       )
+    learner.data.trn_sampler = trn_sampler
+    learner.data.vld_sampler = vld_sampler
 
+    cb_shuffle = CbShuffle(learner, config=config)
+    #cbs = [cb_cal_map5, cb_scoreboard, cb_early_stop]
+    #cbs = [cb_scoreboard, cb_early_stop]
+    cbs = [cb_shuffle]#, cb_cal_map5]
 
-    learner.fit_one_cycle(100, 3e-3)#, callbacks=cbs)
+    if config.trn.find_lr:
+        print('LR finding ...')
+        learner.lr_find()
+        learner.recorder.plot()
+        plt.savefig('lr_find.png')
+        exit()
+
+    #learner.fit_one_cycle(100, config.trn.max_lr, callbacks=cbs)
+    learner.fit(100, config.trn.max_lr, callbacks=cbs)
 
 
 

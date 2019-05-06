@@ -4,6 +4,9 @@ from torch.utils.data.sampler import Sampler
 from albumentations import *
 from albumentations.imgaug import *
 from PIL import Image
+import copy
+from scipy.signal import hilbert
+import matplotlib.pyplot as plt
 import imgaug as ia
 from imgaug import augmenters as iaa
 #from utils import *
@@ -17,6 +20,16 @@ def split_ds(df, n_fold=5, fold_idx=4, offset=15_0000):
         vld_end = sec_len * (fold_idx + 1) - offset
 
     return vld_start, vld_end
+
+def extend_df(df):
+    raw = np.asarray(df.acoustic_data.values, dtype=np.float32)
+    df.a2 = mov_avg(raw, n=2)
+    df.a4 = mov_avg(raw, n=4)
+    df.a8 = mov_avg(raw, n=8)
+    df.a16 = mov_avg(raw, n=16)
+    df.a32 = mov_avg(raw, n=32)
+    df.a64 = mov_avg(raw, n=64)
+    pass
 
 
 class BatchSamplerHole1(Sampler):
@@ -155,37 +168,262 @@ class BatchSamplerVld(Sampler):
         return self.batch_len
 
 
+class RandomSamplerEx(Sampler):
+    r"""Samples elements randomly. If without replacement, then sample from a shuffled dataset.
+    If with replacement, then user can specify ``num_samples`` to draw.
+
+    Arguments:
+        data_source (Dataset): dataset to sample from
+        num_samples (int): number of samples to draw, default=len(dataset)
+        replacement (bool): samples are drawn with replacement if ``True``, default=False
+    """
+
+    def __init__(self, data_range, hole_range=(0, 0), replacement=False, num_samples=None):
+        self.data_source = data_source
+        self.replacement = replacement
+        self.num_samples = num_samples
+        self.data_range = data_range
+        self.hole_range = hole_range
+        self.data_len = (self.data_range[1] - self.data_range[0]) - (self.hole_range[1] - self.hole_range[0])
+
+        if self.num_samples is not None and replacement is False:
+            raise ValueError("With replacement=False, num_samples should not be specified, "
+                             "since a random permute will be performed.")
+
+        if self.num_samples is None:
+            self.num_samples = self.data_len
+
+        if not isinstance(self.num_samples, int) or self.num_samples <= 0:
+            raise ValueError("num_samples should be a positive integeral "
+                             "value, but got num_samples={}".format(self.num_samples))
+        if not isinstance(self.replacement, bool):
+            raise ValueError("replacement should be a boolean value, but got "
+                             "replacement={}".format(self.replacement))
+
+    def gen_samples(self):
+        torch.randint(low=self.data_range[0], high=self.data_range[1], size=(self.num_samples,), dtype=torch.int64).tolist()
+        n = len(self.data_source)
+        if self.replacement:
+            return iter(torch.randint(high=n, size=(self.num_samples,), dtype=torch.int64).tolist())
+        return iter(torch.randperm(n).tolist())
+
+
+    def __iter__(self):
+        n = len(self.data_source)
+        if self.replacement:
+            return iter(torch.randint(high=n, size=(self.num_samples,), dtype=torch.int64).tolist())
+        return iter(torch.randperm(n).tolist())
+
+    def __len__(self):
+        return len(self.data_source)
+
+
+class RandomSamplerKFoldTrn(Sampler):
+    r"""Samples elements randomly. If without replacement, then sample from a shuffled dataset.
+    If with replacement, then user can specify ``num_samples`` to draw.
+
+    Arguments:
+        data_source (Dataset): dataset to sample from
+        num_samples (int): number of samples to draw, default=len(dataset)
+        replacement (bool): samples are drawn with replacement if ``True``, default=False
+    """
+
+    def __init__(self, ds_len, k_fold=5, fold=4, n_samples=10_000, offset=15_0000):
+        self.ds_len = ds_len
+        self.fold_len = ds_len // k_fold
+        self.vld_min = self.fold_len * fold
+        self.vld_max = self.fold_len * (fold + 1)
+        self.trn_folds = list(range(k_fold))
+        self.trn_folds.remove(fold)
+        self.n_samples = n_samples
+        self.offset = offset
+        self.idxes = np.zeros(self.n_samples, dtype=np.int32).tolist()
+        self.gen_idxes()
+
+    def gen_idxes(self, seed=None):
+        if seed is not None:
+            np.random.seed(seed)
+        n = self.n_samples + 10000
+        folds = np.random.choice(self.trn_folds, size=n)
+        fold_idxes = np.random.randint(self.fold_len, size=n)
+        idxes = self.fold_len * folds + fold_idxes
+        cnt = 0
+        for k in range(n):
+            #idx = self.fold_len * folds[k] + fold_idxes[k]
+            if idxes[k] < self.offset:
+                continue
+            self.idxes[cnt] = idxes[k]
+            cnt += 1
+            if cnt >= self.n_samples:
+                break
+
+    def __iter__(self):
+        return iter(self.idxes)
+
+    def __len__(self):
+        return self.n_samples
+
+
+class RandomSamplerKFoldVld(Sampler):
+    r"""Samples elements randomly. If without replacement, then sample from a shuffled dataset.
+    If with replacement, then user can specify ``num_samples`` to draw.
+
+    Arguments:
+        data_source (Dataset): dataset to sample from
+        num_samples (int): number of samples to draw, default=len(dataset)
+        replacement (bool): samples are drawn with replacement if ``True``, default=False
+    """
+
+    def __init__(self, ds_len, k_fold=5, fold=4, n_samples=10_000, offset=15_0000):
+        self.ds_len = ds_len
+        self.fold_len = ds_len // k_fold
+        self.vld_min = self.fold_len * fold
+        self.vld_max = self.fold_len * (fold + 1)
+        self.n_samples = n_samples
+        self.offset = offset
+        self.gen_idxes()
+
+    def gen_idxes(self, seed=None):
+        if seed is not None:
+            np.random.seed(seed)
+        self.idxes = np.random.randint(self.vld_min+self.offset, self.vld_max-self.offset, size=self.n_samples).tolist()
+
+    def __iter__(self):
+        return iter(self.idxes)
+
+    def __len__(self):
+        return self.n_samples
+
+def mov_avg(a, n=40):
+    ret = np.cumsum(a, dtype=np.float32)
+    ret[n:] = ret[n:] - ret[:-n]
+    #return ret[n - 1:] / n
+    return ret / n
+
+def mov_avgs(a, win=[2]):
+    if isinstance(win, int):
+        win = [win]
+
+    cum = np.cumsum(a, dtype=np.float32)
+    ma = []
+    for w in win:
+        ret = copy.deepcopy(cum)
+        ret[w:] = cum[w:] - cum[:-w]
+        ma.append(ret / w)
+    ma = np.stack(ma)
+    return ma
+
+def visualize1(df, cur_idx, step, n_step):
+    start = cur_idx-step*n_step
+    end = cur_idx
+    raw_x = df.index.values[start:end]
+    raw_y = df.acoustic_data.values[start:end]
+    plt.plot(raw_x, raw_y, c="mediumseagreen")
+    #avg2 = moving_average(raw_y, n=40)
+    plt.plot(raw_x, mov_avg(raw_y, n=2), c="orange")
+    plt.plot(raw_x, mov_avg(raw_y, n=4), c="lightblue")
+    plt.plot(raw_x, mov_avg(raw_y, n=8), c="blue")
+    plt.plot(raw_x, mov_avg(raw_y, n=16), c="darkblue")
+    plt.plot(raw_x, mov_avg(raw_y, n=32), c="black")
+    point_x = df.index.values[start:end:step]
+    point_y = df.acoustic_data.values[start:end:step]
+    #plt.scatter(point_x, point_y, c='r')
+    plt.plot(point_x, point_y, c='grey')
+    plt.show()
+
+def visualize(arr, wins):
+    sl = 4096
+    colors = ['yellow', 'orange', 'lightgreen', 'cyan', 'darkgreen', 'lightblue', 'darkblue']
+    rows, al = arr.shape
+    x = list(range(arr.shape[-1]))
+    plt.plot(x, arr[0], c=colors[0])
+    for k, w in enumerate(wins):
+        seq = slice(al - w * sl, al, w)
+        #plt.scatter(x[seq], arr[k, seq], c=colors[k])
+        plt.plot(x[seq], arr[k, seq], c=colors[k])
+    plt.show()
+    return
+
+    start = cur_idx-step*n_step
+    end = cur_idx
+    raw_x = df.index.values[start:end]
+    raw_y = df.acoustic_data.values[start:end]
+    plt.plot(raw_x, raw_y, c="mediumseagreen")
+    #avg2 = moving_average(raw_y, n=40)
+    plt.plot(raw_x, mov_avg(raw_y, n=2), c="orange")
+    plt.plot(raw_x, mov_avg(raw_y, n=4), c="lightblue")
+    plt.plot(raw_x, mov_avg(raw_y, n=8), c="blue")
+    plt.plot(raw_x, mov_avg(raw_y, n=16), c="darkblue")
+    plt.plot(raw_x, mov_avg(raw_y, n=32), c="black")
+    point_x = df.index.values[start:end:step]
+    point_y = df.acoustic_data.values[start:end:step]
+    #plt.scatter(point_x, point_y, c='r')
+    plt.plot(point_x, point_y, c='grey')
+    plt.show()
+
+
+def get_mov_avg_featres(feat_seq, wins, raw_len, seq_len):
+    avgs = mov_avgs(feat_seq, wins)
+    ret = []
+    for k, w in enumerate(wins):
+        sel = slice(raw_len - w * seq_len, raw_len, w)
+        ret.append(avgs[k, sel])
+    ret = np.stack(ret)
+    return ret
+
+def get_dist(raw_seq):
+    dist = np.zeros_like(raw_seq)
+    dist[1:] = abs(raw_seq[1:] - raw_seq[:-1])
+    return dist
+
+def get_envelope(raw_seq):
+    hbt = hilbert(raw_seq)
+    envelope = np.abs(hbt)
+    return envelope
+
 class QuakeDataSet(Dataset):
-    def __init__(self, df, seq_len=150_000, mode='trn'):
+    def __init__(self, df, mode='trn', config=None):
         self.df = df
-        self.seq_len = seq_len
+        self.raw_len = config.ds.raw_len
+        self.seq_len = config.ds.seq_len
         self.mode = mode
         self.step = 37
-        self.n_step = self.seq_len // self.step
+        self.n_step = self.raw_len // self.step
+        self.wins = [1, 2, 4]
 
     def __len__(self):
         return len(self.df)
 
-    def get_label(self, index, flip=False):
-        label_idx = self.label2idx[self.df.loc[index, 'Id']]
-        if flip and label_idx < self.categories:
-            label_idx += self.categories
-        return label_idx
-
     def __getitem__(self, index):
-        self.data = np.asarray(self.df.loc[index-(self.step*self.n_step):index:self.step, 'acoustic_data'].values, dtype=np.float32)
         self.target = 0.0
         if self.mode in ['trn', 'vld']:
             self.target = self.df.at[index, 'time_to_failure']
-        return self.data, np.float32(self.target)
+        raw_data = np.asarray(self.df.loc[index - self.raw_len + 1:index, 'acoustic_data'].values, dtype=np.float32)
+        raw = get_mov_avg_featres(raw_data, [1, 2, 4, 8], self.raw_len, self.seq_len)
+        dist = get_dist(raw_data)
+        dists = get_mov_avg_featres(dist, [1, 2, 4, 8], self.raw_len, self.seq_len)
+        envelope = get_envelope(raw_data)
+        envelopes = get_mov_avg_featres(envelope, [1, 2, 4, 8, 16], self.raw_len, self.seq_len)
+        data = np.concatenate([raw, dists, envelopes], axis=0)
+        return data, np.float32(self.target)
 
-    def __getitem1__(self, index):
-        self.data = self.df.loc[index+1-self.seq_len:index+1, 'acoustic_data']
+    def __getitem__1(self, index):
+        self.target = 0.0
         if self.mode in ['trn', 'vld']:
             self.target = self.df.at[index, 'time_to_failure']
-            return self.data, self.target
-        else:
-            return self.data
+        raw_data = np.asarray(self.df.loc[index - self.raw_len + 1:index, 'acoustic_data'].values, dtype=np.float32)
+        ma = mov_avgs(raw_data, self.wins)
+        #data = np.zeros((len(self.wins), self.seq_len), dtype=np.float32)
+        data = []
+        for k, seq in enumerate(ma):
+            step = self.wins[k]
+            s = seq[self.raw_len-step*self.seq_len:self.raw_len:step]
+            data.append(s)
+        data = np.stack(data)
+        #visualize(ma, self.wins)
+        #visualize1(self.df, index, self.step, self.n_step)
+        return data, np.float32(self.target)
+
 
 #trn_trfm = Compose([
 #    Crop(),
