@@ -157,10 +157,11 @@ class WaveNet(nn.Module):
             nn.ReLU(inplace=True),
             Conv1d1x1(pars.n_blk_skip, pars.n_blk_skip,
                       weight_normalization=pars.use_weight_norm),
+            nn.AdaptiveAvgPool1d(pars.shrinked_len)
         ])
 
         self.fc_dropout1 = nn.Dropout(1 - pars.fc_dropout_keep)
-        self.fc1 = nn.Linear(self.n_blk_res*self.seq_len, self.mid)
+        self.fc1 = nn.Linear(self.n_blk_res*pars.shrinked_len, self.mid)
         self.fc_dropout2 = nn.Dropout(1 - pars.fc_dropout_keep)
         self.fc2 = nn.Linear(self.mid, 1)
 
