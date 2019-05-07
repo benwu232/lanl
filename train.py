@@ -18,20 +18,20 @@ import argparse
 from functools import partial
 import torchvision
 import pprint
+from torchsummary import summary
 #from utils import *
 #from models import *
 from dataset import *
 from framework import *
 from wavenet import *
 
-DBG = False
-if DBG:
-    rows = 10000
-
+DBG = 1
 
 def run(config):
     config.env.update(init_env(config))
     df = load_dump(config.env.pdir.data/f'train_df.pkl')
+    if config.DBG:
+        df = df.loc[:10_000_000]
     #extend_df(df)
     #vld_range = split_ds(df)
     ds_len = len(df)
@@ -102,6 +102,7 @@ def run(config):
                             sort=config.scoreboard.sort)
 
     model = WaveNet(config.model)
+    summary(model.cuda(), input_size=(15, 8192))
     #optimizer = set_optimizer(model, config.opt)
     loss_fn = set_loss_fn('L1Loss')
 
