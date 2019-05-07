@@ -3,7 +3,7 @@ name: 'model101'
 n_process: 2
 
 raw_len: &raw_len 150_000
-seq_len: &seq_len 4096
+seq_len: &seq_len 8192
 
 env:
   root_path: '/media/wb/backup/work/LANL-Earthquake-Prediction'
@@ -13,7 +13,7 @@ env:
 model:
   name: 'WaveNet'
   n_stacks: 2
-  layers_per_stack: 12
+  layers_per_stack: 13
   #layers_per_stack: 10
   kernel_size: 2
   n_features: 32
@@ -23,7 +23,8 @@ model:
   init_type: 'xavier_normal'
   act_type: 'tanh'
   wn_dropout_keep: 1.0
-  norm_type: 'batch_norm'
+  #norm_type: 'batch_norm'
+  norm_type: 'none'
   fc_dropout_keep: 0.5
   use_weight_norm: False
 
@@ -32,14 +33,14 @@ opt:
   lr: !!float 1e-3
   beta1: 0.9
   beta2: 0.999
-  weight_decay: !!float 1e-4
+  weight_decay: !!float 3e-3
   epsilon: !!float 1e-8
 
 trn:
   #pretrained_file: 'Arc_11'
   #pretrained_file: 'CosNet-known-densenet121-best'
   #pretrained_file: 'CosNet-known-densenet121-8'
-  batch_size: 64
+  batch_size: 48
   batches_per_epoch: 500
   n_epoch: 600
   patience: 100
@@ -54,7 +55,7 @@ trn:
   epoch_len: 50_000
 
 vld:
-  batch_size: 128
+  batch_size: 96
   epoch_len: 25_000
 
 ds:

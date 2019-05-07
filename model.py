@@ -169,7 +169,7 @@ class WaveNet(nn.Module):
         init_weights(self, init_type=self.init_type)
         self.act = sel_act(self.act_type)
 
-        self.conv1 = Conv1D1x1(39, self.n_blk_res, bias=self.bias, weight_norm=self.weight_norm, init_type=self.init_type)
+        self.conv1 = Conv1D1x1(45, self.n_blk_res, bias=self.bias, weight_norm=self.weight_norm, init_type=self.init_type)
         self.wavenet_layers = nn.ModuleList()
         self.n_layers = self.layers_per_stack*self.n_stacks
         for layer in range(self.n_layers):
