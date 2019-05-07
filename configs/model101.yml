@@ -1,6 +1,8 @@
 
 name: 'model101'
+DBG: 1
 n_process: 2
+
 
 raw_len: &raw_len 150_000
 seq_len: &seq_len 8192
@@ -14,6 +16,7 @@ model:
   name: 'WaveNet'
   legacy: False
   seq_len: *seq_len
+  shrinked_len: 512
   stacks: 2
   layers: 26
   layers_per_stack: 13
@@ -44,7 +47,7 @@ trn:
   #pretrained_file: 'Arc_11'
   #pretrained_file: 'CosNet-known-densenet121-best'
   #pretrained_file: 'CosNet-known-densenet121-8'
-  batch_size: 48
+  batch_size: 64
   batches_per_epoch: 500
   n_epoch: 600
   patience: 100
@@ -59,7 +62,7 @@ trn:
   epoch_len: 50_000
 
 vld:
-  batch_size: 96
+  batch_size: 128
   epoch_len: 25_000
 
 ds:

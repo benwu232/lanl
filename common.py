@@ -96,6 +96,7 @@ class BaseDirs():
             self.root = Path().resolve().parent
         else:
             self.root = Path(root_path)
+        self.root.mkdir(exist_ok=True)
 
         if data_path is None:
             self.data = self.root/'input'
