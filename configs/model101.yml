@@ -12,7 +12,10 @@ env:
 
 model:
   name: 'WaveNet'
-  n_stacks: 2
+  legacy: False
+  seq_len: *seq_len
+  stacks: 2
+  layers: 26
   layers_per_stack: 13
   #layers_per_stack: 10
   kernel_size: 2
@@ -20,9 +23,10 @@ model:
   n_blk_res: 16
   n_blk_skip: 16
   bias: True
+  mid: 100
   init_type: 'xavier_normal'
   act_type: 'tanh'
-  wn_dropout_keep: 1.0
+  wn_dropout_keep: 0.95
   #norm_type: 'batch_norm'
   norm_type: 'none'
   fc_dropout_keep: 0.5

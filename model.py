@@ -188,7 +188,7 @@ class WaveNet(nn.Module):
 
         #mean = batch.mean(dim=-1).unsqueeze(2).expand(-1, -1, seq_len)
         #std = batch.std(dim=-1).unsqueeze(2).expand(-1, -1, seq_len)
-        batch_cat = torch.cat([batch, mean, std], dim=1)
+        batch_cat = torch.cat([x_scaled, mean, std], dim=1)
 
         skip_outs = []
         x = self.conv1(batch_cat)

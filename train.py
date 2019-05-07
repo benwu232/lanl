@@ -21,8 +21,8 @@ import pprint
 #from utils import *
 #from models import *
 from dataset import *
-from model import *
 from framework import *
+from wavenet import *
 
 DBG = False
 if DBG:
