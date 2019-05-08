@@ -130,11 +130,13 @@ class WaveNet(nn.Module):
         self.n_blk_res = pars.n_blk_res
         self.n_blk_skip = pars.n_blk_skip
         self.seq_len = pars.seq_len
+        self.raw_len = pars.raw_len
+        self.rows = self.raw_len // self.seq_len
         self.mid = pars.mid
         if scalar_input:
             self.first_conv = Conv1d1x1(1, pars.n_blk_res)
         else:
-            self.first_conv = Conv1d1x1(pars.in_features, pars.n_blk_res)
+            self.first_conv = Conv1d1x1(self.rows+2, pars.n_blk_res)
 
         self.conv_layers = nn.ModuleList()
         for layer in range(layers):
@@ -155,13 +157,13 @@ class WaveNet(nn.Module):
             Conv1d1x1(pars.n_blk_skip*layers, pars.n_blk_skip,
                       weight_normalization=pars.use_weight_norm),
             nn.ReLU(inplace=True),
-            Conv1d1x1(pars.n_blk_skip, pars.n_blk_skip,
+            Conv1d1x1(pars.n_blk_skip, pars.mid,
                       weight_normalization=pars.use_weight_norm),
             nn.AdaptiveAvgPool1d(pars.shrinked_len)
         )
 
         self.fc_dropout1 = nn.Dropout(1 - pars.fc_dropout_keep)
-        self.fc1 = nn.Linear(pars.n_blk_skip*pars.shrinked_len, self.mid)
+        self.fc1 = nn.Linear(pars.mid*pars.shrinked_len, self.mid)
         self.fc_dropout2 = nn.Dropout(1 - pars.fc_dropout_keep)
         self.fc2 = nn.Linear(self.mid, 1)
 
@@ -216,10 +218,12 @@ class WaveNet(nn.Module):
         #    c = c.squeeze(1)
         #    assert c.size(-1) == x.size(-1)
 
-        batch_size, _, seq_len = x.shape
+        batch_size, _, raw_len = x.shape
+        #rows = raw_len // self.seq_len
         x_scaled, avg, std = standardize(x, dim=2)
-        mean = avg.expand(-1, -1, seq_len)
-        std = std.expand(-1, -1, seq_len)
+        x_scaled = x_scaled.view(-1, self.rows, self.seq_len)
+        mean = avg.expand(-1, -1, self.seq_len)
+        std = std.expand(-1, -1, self.seq_len)
         x_cat = torch.cat([x_scaled, mean, std], dim=1)
 
         # Feed data to network

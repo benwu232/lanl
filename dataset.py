@@ -391,14 +391,9 @@ class QuakeDataSet(Dataset):
         self.target = 0.0
         if self.mode in ['trn', 'vld']:
             self.target = self.df.at[index, 'time_to_failure']
-        raw_data = np.asarray(self.df.loc[index - self.raw_len + 1:index, 'acoustic_data'].values, dtype=np.float32)
-        raw = get_mov_avg_featres(raw_data, [1, 2, 4, 8], self.raw_len, self.seq_len)
-        dist = get_dist(raw_data)
-        dists = get_mov_avg_featres(dist, [1, 2, 4, 8], self.raw_len, self.seq_len)
-        envelope = get_envelope(raw_data)
-        envelopes = get_mov_avg_featres(envelope, [1, 2, 4, 8], self.raw_len, self.seq_len)
-
-        data = np.concatenate([raw, dists, envelopes], axis=0)
+        rows = self.raw_len // self.seq_len
+        raw_data = np.asarray(self.df.loc[index - rows*self.seq_len + 1:index, 'acoustic_data'].values, dtype=np.float32)
+        data = raw_data.reshape(1, raw_data.shape[-1])
         return data, np.float32(self.target)
 
     def __getitem__1(self, index):

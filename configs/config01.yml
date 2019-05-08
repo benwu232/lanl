@@ -18,17 +18,17 @@ model:
   legacy: False
   seq_len: *seq_len
   raw_len: *raw_len
-  shrinked_len: 50
-  stacks: 4
+  shrinked_len: 128
+  stacks: 3
   #layers: 26
   layers_per_stack: 8
   #layers_per_stack: 9
   #layers_per_stack: 13
   kernel_size: 2
   in_features: 36
-  #n_features: 512
-  n_blk_res: 200
-  n_blk_skip: 200
+  n_features: 256
+  n_blk_res: 128
+  n_blk_skip: 128
   bias: True
   mid: 100
   init_type: 'xavier_normal'
@@ -52,7 +52,7 @@ trn:
   #pretrained_file: 'Arc_11'
   #pretrained_file: 'CosNet-known-densenet121-best'
   #pretrained_file: 'CosNet-known-densenet121-8'
-  batch_size: 32
+  batch_size: 64
   batches_per_epoch: 500
   n_epoch: 600
   patience: 100
@@ -67,7 +67,7 @@ trn:
   epoch_len: 10_000
 
 vld:
-  batch_size: 64
+  batch_size: 128
   epoch_len: 2_000
 
 ds:
