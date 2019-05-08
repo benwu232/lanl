@@ -134,7 +134,7 @@ class WaveNet(nn.Module):
         if scalar_input:
             self.first_conv = Conv1d1x1(1, pars.n_blk_res)
         else:
-            self.first_conv = Conv1d1x1(45, pars.n_blk_res)
+            self.first_conv = Conv1d1x1(pars.in_features, pars.n_blk_res)
 
         self.conv_layers = nn.ModuleList()
         for layer in range(layers):
@@ -150,7 +150,186 @@ class WaveNet(nn.Module):
                 weight_normalization=pars.use_weight_norm)
             self.conv_layers.append(conv)
 
-        self.last_conv_layers = nn.ModuleList([
+        self.last_conv_layers = nn.Sequential(
+            nn.ReLU(inplace=True),
+            Conv1d1x1(pars.n_blk_skip*layers, pars.n_blk_skip,
+                      weight_normalization=pars.use_weight_norm),
+            nn.ReLU(inplace=True),
+            Conv1d1x1(pars.n_blk_skip, pars.n_blk_skip,
+                      weight_normalization=pars.use_weight_norm),
+            nn.AdaptiveAvgPool1d(pars.shrinked_len)
+        )
+
+        self.fc_dropout1 = nn.Dropout(1 - pars.fc_dropout_keep)
+        self.fc1 = nn.Linear(pars.n_blk_skip*pars.shrinked_len, self.mid)
+        self.fc_dropout2 = nn.Dropout(1 - pars.fc_dropout_keep)
+        self.fc2 = nn.Linear(self.mid, 1)
+
+        self.embed_speakers = None
+        self.upsample_conv = None
+        self.receptive_field = receptive_field_size(layers, stacks, pars.kernel_size)
+        print(f'receptive field: {self.receptive_field}')
+
+    def has_speaker_embedding(self):
+        return self.embed_speakers is not None
+
+    def local_conditioning_enabled(self):
+        return self.cin_channels > 0
+
+    def forward(self, x, c=None, g=None, softmax=False):
+        """Forward step
+
+        Args:
+            x (Tensor): One-hot encoded audio signal, shape (B x C x T)
+            c (Tensor): Local conditioning features,
+              shape (B x cin_channels x T)
+            g (Tensor): Global conditioning features,
+              shape (B x gin_channels x 1) or speaker Ids of shape (B x 1).
+              Note that ``self.use_speaker_embedding`` must be False when you
+              want to disable embedding layer and use external features
+              directly (e.g., one-hot vector).
+              Also type of input tensor must be FloatTensor, not LongTensor
+              in case of ``self.use_speaker_embedding`` equals False.
+            softmax (bool): Whether applies softmax or not.
+
+        Returns:
+            Tensor: output, shape B x out_channels x T
+        """
+        #B, _, T = x.size()
+
+        #if g is not None:
+        #    if self.embed_speakers is not None:
+        #        # (B x 1) -> (B x 1 x gin_channels)
+        #        g = self.embed_speakers(g.view(B, -1))
+        #        # (B x gin_channels x 1)
+        #        g = g.transpose(1, 2)
+        #        assert g.dim() == 3
+        ## Expand global conditioning features to all time steps
+        #g_bct = _expand_global_features(B, T, g, bct=True)
+
+        #if c is not None and self.upsample_conv is not None:
+        #    # B x 1 x C x T
+        #    c = c.unsqueeze(1)
+        #    for f in self.upsample_conv:
+        #        c = f(c)
+        #    # B x C x T
+        #    c = c.squeeze(1)
+        #    assert c.size(-1) == x.size(-1)
+
+        batch_size, _, seq_len = x.shape
+        x_scaled, avg, std = standardize(x, dim=2)
+        mean = avg.expand(-1, -1, seq_len)
+        std = std.expand(-1, -1, seq_len)
+        x_cat = torch.cat([x_scaled, mean, std], dim=1)
+
+        # Feed data to network
+        x = self.first_conv(x_cat)
+        skips = []
+        for f in self.conv_layers:
+            #x, h = f(x, c, g_bct)
+            x, h = f(x)
+            skips.append(h)
+        skips = torch.cat(skips, dim=1)
+        x = self.last_conv_layers(skips)
+
+        x = x.view(batch_size, -1)
+        x = self.fc_dropout1(x)
+        x = self.fc1(x)
+        x = self.fc_dropout2(x)
+        x = self.fc2(x)
+        #x = F.softmax(x, dim=1) if softmax else x
+
+        return x
+
+
+class WaveNet1(nn.Module):
+    """The WaveNet model that supports local and global conditioning.
+
+    Args:
+        out_channels (int): Output channels. If input_type is mu-law quantized
+          one-hot vecror. this must equal to the quantize channels. Other wise
+          num_mixtures x 3 (pi, mu, log_scale).
+        layers (int): Number of total layers
+        stacks (int): Number of dilation cycles
+        residual_channels (int): Residual input / output channels
+        gate_channels (int): Gated activation channels.
+        skip_out_channels (int): Skip connection channels.
+        kernel_size (int): Kernel size of convolution layers.
+        dropout (float): Dropout probability.
+        cin_channels (int): Local conditioning channels. If negative value is
+          set, local conditioning is disabled.
+        gin_channels (int): Global conditioning channels. If negative value is
+          set, global conditioning is disabled.
+        n_speakers (int): Number of speakers. Used only if global conditioning
+          is enabled.
+        weight_normalization (bool): If True, DeepVoice3-style weight
+          normalization is applied.
+        upsample_conditional_features (bool): Whether upsampling local
+          conditioning features by transposed convolution layers or not.
+        upsample_scales (list): List of upsample scale.
+          ``np.prod(upsample_scales)`` must equal to hop size. Used only if
+          upsample_conditional_features is enabled.
+        freq_axis_kernel_size (int): Freq-axis kernel_size for transposed
+          convolution layers for upsampling. If you only care about time-axis
+          upsampling, set this to 1.
+        scalar_input (Bool): If True, scalar input ([-1, 1]) is expected, otherwise
+          quantized one-hot vector is expected.
+        use_speaker_embedding (Bool): Use speaker embedding or Not. Set to False
+          if you want to disable embedding layer and use external features
+          directly.
+        legacy (bool) Use legacy code or not. Default is True for backward
+          compatibility.
+    """
+
+    #def __init__(self, out_channels=256, layers=20, stacks=2,
+    #             residual_channels=512,
+    #             gate_channels=512,
+    #             skip_out_channels=512,
+    #             kernel_size=3, dropout=1 - 0.95,
+    #             cin_channels=-1, gin_channels=-1, n_speakers=None,
+    #             weight_normalization=True,
+    #             upsample_conditional_features=False,
+    #             upsample_scales=None,
+    #             freq_axis_kernel_size=3,
+    #             scalar_input=False,
+    #             use_speaker_embedding=True,
+    #             legacy=True,
+    #             ):
+    def __init__(self, pars):
+        super().__init__()
+        #self.scalar_input = scalar_input
+        #self.out_channels = out_channels
+        #self.cin_channels = cin_channels
+        #self.legacy = legacy
+        layers_per_stack = pars.layers_per_stack
+        stacks = pars.stacks
+        layers = layers_per_stack * stacks
+        scalar_input = False
+        self.legacy = pars.legacy
+        self.n_blk_res = pars.n_blk_res
+        self.n_blk_skip = pars.n_blk_skip
+        self.seq_len = pars.seq_len
+        self.mid = pars.mid
+        if scalar_input:
+            self.first_conv = Conv1d1x1(1, pars.n_blk_res)
+        else:
+            self.first_conv = Conv1d1x1(pars.in_features, pars.n_blk_res)
+
+        self.conv_layers = nn.ModuleList()
+        for layer in range(layers):
+            dilation = 2**(layer % layers_per_stack)
+            conv = ResidualConv1dGLU(
+                pars.n_blk_res, pars.n_blk_res,
+                kernel_size=pars.kernel_size,
+                skip_out_channels=pars.n_blk_skip,
+                bias=True,  # magenda uses bias, but musyoku doesn't
+                dilation=dilation, dropout=1-pars.wn_dropout_keep,
+                #cin_channels=cin_channels,
+                #gin_channels=gin_channels,
+                weight_normalization=pars.use_weight_norm)
+            self.conv_layers.append(conv)
+
+        self.last_conv_layers = nn.Sequential(
             nn.ReLU(inplace=True),
             Conv1d1x1(pars.n_blk_skip, pars.n_blk_skip,
                       weight_normalization=pars.use_weight_norm),
@@ -158,17 +337,17 @@ class WaveNet(nn.Module):
             Conv1d1x1(pars.n_blk_skip, pars.n_blk_skip,
                       weight_normalization=pars.use_weight_norm),
             nn.AdaptiveAvgPool1d(pars.shrinked_len)
-        ])
+        )
 
         self.fc_dropout1 = nn.Dropout(1 - pars.fc_dropout_keep)
-        self.fc1 = nn.Linear(self.n_blk_res*pars.shrinked_len, self.mid)
+        self.fc1 = nn.Linear(pars.n_blk_skip*pars.shrinked_len, self.mid)
         self.fc_dropout2 = nn.Dropout(1 - pars.fc_dropout_keep)
         self.fc2 = nn.Linear(self.mid, 1)
 
         self.embed_speakers = None
         self.upsample_conv = None
         self.receptive_field = receptive_field_size(layers, stacks, pars.kernel_size)
-        pass
+        print(f'receptive field: {self.receptive_field}')
 
     def has_speaker_embedding(self):
         return self.embed_speakers is not None
@@ -235,9 +414,7 @@ class WaveNet(nn.Module):
                 if self.legacy:
                     skips *= math.sqrt(0.5)
 
-        x = skips
-        for f in self.last_conv_layers:
-            x = f(x)
+        x = self.last_conv_layers(skips)
 
         x = x.view(batch_size, -1)
         x = self.fc_dropout1(x)

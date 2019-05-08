@@ -383,9 +383,6 @@ class QuakeDataSet(Dataset):
         self.raw_len = config.ds.raw_len
         self.seq_len = config.ds.seq_len
         self.mode = mode
-        self.step = 37
-        self.n_step = self.raw_len // self.step
-        self.wins = [1, 2, 4]
 
     def __len__(self):
         return len(self.df)
@@ -395,11 +392,12 @@ class QuakeDataSet(Dataset):
         if self.mode in ['trn', 'vld']:
             self.target = self.df.at[index, 'time_to_failure']
         raw_data = np.asarray(self.df.loc[index - self.raw_len + 1:index, 'acoustic_data'].values, dtype=np.float32)
-        raw = get_mov_avg_featres(raw_data, [1, 2, 4, 8, 16], self.raw_len, self.seq_len)
+        raw = get_mov_avg_featres(raw_data, [1, 2, 4, 8], self.raw_len, self.seq_len)
         dist = get_dist(raw_data)
-        dists = get_mov_avg_featres(dist, [1, 2, 4, 8, 16], self.raw_len, self.seq_len)
+        dists = get_mov_avg_featres(dist, [1, 2, 4, 8], self.raw_len, self.seq_len)
         envelope = get_envelope(raw_data)
-        envelopes = get_mov_avg_featres(envelope, [1, 2, 4, 8, 16], self.raw_len, self.seq_len)
+        envelopes = get_mov_avg_featres(envelope, [1, 2, 4, 8], self.raw_len, self.seq_len)
+
         data = np.concatenate([raw, dists, envelopes], axis=0)
         return data, np.float32(self.target)
 
