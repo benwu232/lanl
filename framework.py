@@ -2,7 +2,7 @@
 import torch.nn as nn
 from torch.optim import *
 from common import *
-from model import *
+from model_th import *
 
 
 class TorchFrame(object):

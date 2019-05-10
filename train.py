@@ -24,6 +24,7 @@ from torchsummary import summary
 from dataset import *
 from framework import *
 from wavenet import *
+from model_kr import *
 
 
 def run(config):
@@ -37,6 +38,9 @@ def run(config):
     #vld_range = split_ds(df)
     ds_len = len(df)
 
+    X_train = df.acoustic_data.values
+    y_train = df.time_to_failure.values
+
     config.seg_spans = segment_df(df, config.raw_len)
     config.n_seg = len(config.seg_spans)
     config.trn_seg = list(set(range(config.n_seg)) - set(config.vld_seg))
@@ -44,129 +48,64 @@ def run(config):
     x_sum = 0.
     count = 0
 
-    for s in t_segments:
+    for s in config.trn_seg:
         x_sum += X_train[s[0]:s[1]].sum()
         count += (s[1] - s[0])
 
     X_train_mean = x_sum/count
 
     x2_sum = 0.
-    for s in t_segments:
+    for s in config.trn_seg:
         x2_sum += np.power(X_train[s[0]:s[1]] - X_train_mean, 2).sum()
 
     X_train_std =  np.sqrt(x2_sum/count)
 
     print(X_train_mean, X_train_std)
 
-
-
-
-
-
-
-
-
-    trn_ds = QuakeDataSet(df=df, mode='trn', config=config)
-    trn_sampler = RandomSamplerSeg(n_samples=config.trn.epoch_len, mode='trn', config=config)
-    trn_dl = DataLoader(
-        trn_ds,
-        batch_size=config.trn.batch_size,
-        #shuffle=True,
-        drop_last=True,
-        sampler=trn_sampler,
-        pin_memory=True,
-        num_workers=config.n_process
-    )
-    #trn_sampler = BatchSamplerTrn(ds_len,
-    #                              k_fold=k_fold,
-    #                              fold=fold,
-    #                              batch_size=config.trn.batch_size,
-    #                              batch_len=batch_len,
-    #                              )
-    #trn_dl = DataLoader(
-    #    trn_ds,
-    #    batch_size=config.trn.batch_size,
-    #
-    #    batch_sampler=trn_sampler,
-    #    pin_memory=True,
-    #    num_workers=config.n_process
-    #)
-
-
-    vld_ds = QuakeDataSet(df=df, mode='vld', config=config)
-    #vld_sampler = RandomSamplerKFoldVld(ds_len, config.ds.k_fold, config.ds.fold, n_samples=config.vld.epoch_len, offset=config.ds.raw_len)
-    vld_sampler = RandomSamplerSeg(n_samples=config.vld.epoch_len, mode='vld', config=config)
-    vld_dl = DataLoader(
-        vld_ds,
-        batch_size=config.vld.batch_size,
-        #shuffle=True,
-        drop_last=True,
-        sampler=vld_sampler,
-        pin_memory=True,
-        num_workers=config.n_process
+    trn_gen = EarthQuakeRandom(
+        x = X_train,
+        y = y_train,
+        x_mean = X_train_mean,
+        x_std = X_train_std,
+        segments = config.trn_seg,
+        ts_length = 150000,
+        batch_size = 64,
+        steps_per_epoch = 400
     )
 
-    #vld_sampler = BatchSamplerVld(ds_len,
-    #                              k_fold=k_fold,
-    #                              fold=fold,
-    #                              batch_size=config.vld.batch_size,
-    #                              batch_len=100_000,
-    #                             )
-    #vld_dl = DataLoader(
-    #    vld_ds,
-    #    #batch_size=config.trn.batch_size,
-    #    batch_sampler=vld_sampler,
-    #    pin_memory=True,
-    #    num_workers=config.n_process
-    #)
+    vld_gen = EarthQuakeRandom(
+        x = X_train,
+        y = y_train,
+        x_mean = X_train_mean,
+        x_std = X_train_std,
+        segments = config.vld_seg,
+        ts_length = 150000,
+        batch_size = 64,
+        steps_per_epoch = 400
+    )
 
-    #data_bunch = ImageDataBunch(trn_dl, vld_dl, test_dl=tst_dl, device=device)
-    data_bunch = DataBunch(trn_dl, vld_dl, device=device)
+    model = CnnRnnModel()
+    model.compile(loss='mean_absolute_error', optimizer='adam')
+    model.summary()
 
-    scoreboard_file = config.env.pdir.models/f'scoreboard-{config.name}.pkl'
+    hist = model.fit_generator(
+        generator =  trn_gen,
+        epochs = 50,
+        verbose = 0,
+        validation_data = vld_gen,
+        callbacks = [
+            EarlyStopping(monitor='val_loss', patience = 5, verbose = 1),
+            ModelCheckpoint(filepath='cnn_rnn.h5', monitor='val_loss', save_best_only=True, verbose=1)]
+    )
 
-    #if not config.model.pretrain and scoreboard_file.is_file():
-    #    scoreboard_file.unlink()
-
-    scoreboard = Scoreboard(scoreboard_file,
-                            config.scoreboard.len,
-                            sort=config.scoreboard.sort)
-
-    #model = WaveNet(config.model)
-    model = RnnCnn()
-    #summary(model.cuda(), input_size=(3, (config.raw_len//config.seq_len)*config.seq_len))
-    #optimizer = set_optimizer(model, config.opt)
-    loss_fn = set_loss_fn('L1Loss')
-
-
-    #thfra = TorchFrame(config)
-    #thfra.fit()
-    #exit()
+    plt.plot(hist.history['loss'])
+    plt.plot(hist.history['val_loss'])
+    plt.title('Model loss')
+    plt.ylabel('Loss')
+    plt.xlabel('Epoch')
+    _= plt.legend(['Train', 'Test'], loc='upper left')
 
 
-    learner = Learner(data_bunch,
-                      model,
-                      #opt_func=partial(Adam, betas=(config.opt.beta1, config.opt.beta2), weight_decay=config.opt.weight_decay),
-                      loss_func=loss_fn,
-                      true_wd=False,
-                      )
-    learner.data.trn_sampler = trn_sampler
-    learner.data.vld_sampler = vld_sampler
-
-    cb_shuffle = CbShuffle(learner, config=config)
-    #cbs = [cb_cal_map5, cb_scoreboard, cb_early_stop]
-    #cbs = [cb_scoreboard, cb_early_stop]
-    cbs = [cb_shuffle]#, cb_cal_map5]
-
-    if config.trn.find_lr:
-        print('LR finding ...')
-        learner.lr_find()
-        learner.recorder.plot()
-        plt.savefig('lr_find.png')
-        exit()
-
-    #learner.fit_one_cycle(500, config.trn.max_lr, callbacks=cbs)
-    learner.fit(500, config.trn.max_lr, callbacks=cbs)
 
 
 

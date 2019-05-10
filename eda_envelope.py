@@ -21,7 +21,7 @@ import pprint
 #from utils import *
 #from models import *
 from dataset import *
-from model import *
+from model_th import *
 from framework import *
 from scipy.signal import hilbert
 
