@@ -1,3 +1,4 @@
+import keras
 import torch
 from torch.utils.data.dataset import Dataset
 from torch.utils.data.sampler import Sampler
@@ -41,6 +42,62 @@ def extend_df(df):
     df.a32 = mov_avg(raw, n=32)
     df.a64 = mov_avg(raw, n=64)
     pass
+
+
+class EarthQuakeRandom(keras.utils.Sequence):
+
+    def __init__(self, x, y, x_mean, x_std, segments, ts_length, batch_size, steps_per_epoch):
+        self.x = x
+        self.y = y
+        self.segments = segments
+        self.ts_length = ts_length
+        self.batch_size = batch_size
+        self.steps_per_epoch = steps_per_epoch
+        self.segments_size = np.array([s[1] - s[0] for s in segments])
+        self.segments_p = self.segments_size / self.segments_size.sum()
+        self.x_mean = x_mean
+        self.x_std = x_std
+
+    def get_batch_size(self):
+        return self.batch_size
+
+    def get_ts_length(self):
+        return self.ts_length
+
+    def get_segments(self):
+        return self.segments
+
+    def get_segments_p(self):
+        return self.segments_p
+
+    def get_segments_size(self):
+        return self.segments_size
+
+    def __len__(self):
+        return self.steps_per_epoch
+
+    def __getitem__(self, idx):
+        segment_index = np.random.choice(range(len(self.segments)), p=self.segments_p)
+        segment = self.segments[segment_index]
+        end_indexes = np.random.randint(segment[0] + self.ts_length, segment[1], size=self.batch_size)
+
+        x_batch = np.empty((self.batch_size, self.ts_length))
+        y_batch = np.empty(self.batch_size, )
+
+        for i, end in enumerate(end_indexes):
+            x_batch[i, :] = self.x[end - self.ts_length: end]
+            y_batch[i] = self.y[end - 1]
+
+        x_batch = (x_batch - self.x_mean) / self.x_std
+
+        return np.expand_dims(x_batch, axis=2), y_batch
+
+
+
+
+
+
+
 
 
 class BatchSamplerHole1(Sampler):

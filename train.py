@@ -29,7 +29,7 @@ from wavenet import *
 def run(config):
     config.env.update(init_env(config))
     if config.DBG:
-        nrows = 3_000_000
+        nrows = 30_000_000
         df = pd.read_csv(config.env.pdir.data/'train.csv', nrows=nrows, dtype={'acoustic_data': np.int16, 'time_to_failure': np.float64})
     else:
         df = load_dump(config.env.pdir.data/f'train_df.pkl')
@@ -40,6 +40,31 @@ def run(config):
     config.seg_spans = segment_df(df, config.raw_len)
     config.n_seg = len(config.seg_spans)
     config.trn_seg = list(set(range(config.n_seg)) - set(config.vld_seg))
+
+    x_sum = 0.
+    count = 0
+
+    for s in t_segments:
+        x_sum += X_train[s[0]:s[1]].sum()
+        count += (s[1] - s[0])
+
+    X_train_mean = x_sum/count
+
+    x2_sum = 0.
+    for s in t_segments:
+        x2_sum += np.power(X_train[s[0]:s[1]] - X_train_mean, 2).sum()
+
+    X_train_std =  np.sqrt(x2_sum/count)
+
+    print(X_train_mean, X_train_std)
+
+
+
+
+
+
+
+
 
     trn_ds = QuakeDataSet(df=df, mode='trn', config=config)
     trn_sampler = RandomSamplerSeg(n_samples=config.trn.epoch_len, mode='trn', config=config)
