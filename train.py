@@ -28,15 +28,21 @@ from wavenet import *
 
 def run(config):
     config.env.update(init_env(config))
-    df = load_dump(config.env.pdir.data/f'train_df.pkl')
     if config.DBG:
-        df = df.loc[0:3_000_000].reset_index()
+        nrows = 3_000_000
+        df = pd.read_csv(config.env.pdir.data/'train.csv', nrows=nrows, dtype={'acoustic_data': np.int16, 'time_to_failure': np.float64})
+    else:
+        df = load_dump(config.env.pdir.data/f'train_df.pkl')
     #extend_df(df)
     #vld_range = split_ds(df)
     ds_len = len(df)
 
+    config.seg_spans = segment_df(df, config.raw_len)
+    config.n_seg = len(config.seg_spans)
+    config.trn_seg = list(set(range(config.n_seg)) - set(config.vld_seg))
+
     trn_ds = QuakeDataSet(df=df, mode='trn', config=config)
-    trn_sampler = RandomSamplerKFoldTrn(ds_len, config.ds.k_fold, config.ds.fold, n_samples=config.trn.epoch_len, offset=config.ds.raw_len)
+    trn_sampler = RandomSamplerSeg(n_samples=config.trn.epoch_len, mode='trn', config=config)
     trn_dl = DataLoader(
         trn_ds,
         batch_size=config.trn.batch_size,
@@ -63,7 +69,8 @@ def run(config):
 
 
     vld_ds = QuakeDataSet(df=df, mode='vld', config=config)
-    vld_sampler = RandomSamplerKFoldVld(ds_len, config.ds.k_fold, config.ds.fold, n_samples=config.vld.epoch_len, offset=config.ds.raw_len)
+    #vld_sampler = RandomSamplerKFoldVld(ds_len, config.ds.k_fold, config.ds.fold, n_samples=config.vld.epoch_len, offset=config.ds.raw_len)
+    vld_sampler = RandomSamplerSeg(n_samples=config.vld.epoch_len, mode='vld', config=config)
     vld_dl = DataLoader(
         vld_ds,
         batch_size=config.vld.batch_size,
@@ -100,8 +107,9 @@ def run(config):
                             config.scoreboard.len,
                             sort=config.scoreboard.sort)
 
-    model = WaveNet(config.model)
-    summary(model.cuda(), input_size=(1, (config.raw_len//config.seq_len)*config.seq_len))
+    #model = WaveNet(config.model)
+    model = RnnCnn()
+    #summary(model.cuda(), input_size=(3, (config.raw_len//config.seq_len)*config.seq_len))
     #optimizer = set_optimizer(model, config.opt)
     loss_fn = set_loss_fn('L1Loss')
 
@@ -113,7 +121,7 @@ def run(config):
 
     learner = Learner(data_bunch,
                       model,
-                      opt_func=partial(Adam, betas=(config.opt.beta1, config.opt.beta2), weight_decay=config.opt.weight_decay),
+                      #opt_func=partial(Adam, betas=(config.opt.beta1, config.opt.beta2), weight_decay=config.opt.weight_decay),
                       loss_func=loss_fn,
                       true_wd=False,
                       )
@@ -132,8 +140,8 @@ def run(config):
         plt.savefig('lr_find.png')
         exit()
 
-    learner.fit_one_cycle(500, config.trn.max_lr, callbacks=cbs)
-    #learner.fit(500, config.trn.max_lr, callbacks=cbs)
+    #learner.fit_one_cycle(500, config.trn.max_lr, callbacks=cbs)
+    learner.fit(500, config.trn.max_lr, callbacks=cbs)
 
 
 

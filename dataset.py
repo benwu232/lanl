@@ -2,11 +2,26 @@ import torch
 from torch.utils.data.dataset import Dataset
 from torch.utils.data.sampler import Sampler
 from PIL import Image
+import random
 import copy
 from scipy.signal import hilbert
 import matplotlib.pyplot as plt
 #from utils import *
 from common import *
+
+def segment_df(df, offset=150_000):
+    y = df.time_to_failure.values
+    ends_mask = np.less(y[:-1], y[1:])
+    segment_ends = np.nonzero(ends_mask)
+
+    train_segments = []
+    start = 0
+    for end in segment_ends[0]:
+        train_segments.append((start+offset, end))
+        start = end
+
+    print(train_segments)
+    return train_segments
 
 def split_ds(df, n_fold=5, fold_idx=4, offset=15_0000):
     sec_len = int(len(df) // n_fold)
@@ -377,40 +392,86 @@ def get_envelope(raw_seq):
     envelope = np.abs(hbt)
     return envelope
 
+class RandomSamplerSeg(Sampler):
+    r"""Samples elements randomly. If without replacement, then sample from a shuffled dataset.
+    If with replacement, then user can specify ``num_samples`` to draw.
+
+    Arguments:
+        data_source (Dataset): dataset to sample from
+        num_samples (int): number of samples to draw, default=len(dataset)
+        replacement (bool): samples are drawn with replacement if ``True``, default=False
+    """
+
+    def __init__(self, n_samples=10_000, mode='trn', config=None):
+        self.config = config
+        self.seg_spans = config.seg_spans
+        self.mode = mode
+        if mode == 'trn':
+            self.seg_idxes = config.trn_seg
+        elif mode == 'vld':
+            self.seg_idxes = config.vld_seg
+        self.seg_sizes = np.array([self.seg_spans[si][1] - self.seg_spans[si][0] for si in self.seg_idxes])
+        self.seg_p = self.seg_sizes / self.seg_sizes.sum()
+        #self.raw_len = config.ds.raw_len
+        #self.seq_len = config.ds.seq_len
+        self.n_samples = n_samples
+
+    def gen_idxes(self, seed=None):
+        if seed is not None:
+            np.random.seed(seed)
+
+        sidxes = np.random.choice(self.seg_idxes, p=self.seg_p, size=self.n_samples//10)
+        self.idxes = []
+        for si in sidxes:
+            idxes = np.random.randint(self.seg_spans[si][0], self.seg_spans[si][1], size=10, dtype=np.int32).tolist()
+            self.idxes.extend(idxes)
+        random.shuffle(self.idxes)
+
+    def __iter__(self):
+        return iter(self.idxes)
+
+    def __len__(self):
+        return self.n_samples
+
+
 class QuakeDataSet(Dataset):
     def __init__(self, df, mode='trn', config=None):
         self.df = df
+        self.seg_spans = config.seg_spans
+        self.mode = mode
+        if mode == 'trn':
+            self.seg_idxes = config.trn_seg
+        elif mode == 'vld':
+            self.seg_idxes = config.vld_seg
+        self.seg_sizes = np.array([self.seg_spans[si][1] - self.seg_spans[si][0] for si in self.seg_idxes])
+        #self.seg_sizes = np.array([s[1] - s[0] for s in self.seg_spans])
+        self.seg_p = self.seg_sizes / self.seg_sizes.sum()
+
         self.raw_len = config.ds.raw_len
         self.seq_len = config.ds.seq_len
-        self.mode = mode
+        self.segment = self.raw_len // self.seq_len
 
     def __len__(self):
         return len(self.df)
+
+    def __getitem__2(self, index):
+        self.target = 0.0
+        if self.mode in ['trn', 'vld']:
+            self.target = self.df.at[index, 'time_to_failure']
+            #self.target = self.df.at[np.random.randint(len(self.df)), 'time_to_failure']
+        raw_data = np.asarray(self.df.loc[index - self.segment*self.seq_len + 1:index, 'acoustic_data'].values, dtype=np.float32)
+        envelope = get_envelope(raw_data)
+        dist = get_dist(raw_data)
+        data = np.stack([raw_data, envelope, dist])
+        data = np.asarray(data, dtype=np.float32)
+        return data, np.float32(self.target)
 
     def __getitem__(self, index):
         self.target = 0.0
         if self.mode in ['trn', 'vld']:
             self.target = self.df.at[index, 'time_to_failure']
-        rows = self.raw_len // self.seq_len
-        raw_data = np.asarray(self.df.loc[index - rows*self.seq_len + 1:index, 'acoustic_data'].values, dtype=np.float32)
-        data = raw_data.reshape(1, raw_data.shape[-1])
-        return data, np.float32(self.target)
-
-    def __getitem__1(self, index):
-        self.target = 0.0
-        if self.mode in ['trn', 'vld']:
-            self.target = self.df.at[index, 'time_to_failure']
-        raw_data = np.asarray(self.df.loc[index - self.raw_len + 1:index, 'acoustic_data'].values, dtype=np.float32)
-        ma = mov_avgs(raw_data, self.wins)
-        #data = np.zeros((len(self.wins), self.seq_len), dtype=np.float32)
-        data = []
-        for k, seq in enumerate(ma):
-            step = self.wins[k]
-            s = seq[self.raw_len-step*self.seq_len:self.raw_len:step]
-            data.append(s)
-        data = np.stack(data)
-        #visualize(ma, self.wins)
-        #visualize1(self.df, index, self.step, self.n_step)
+        data = np.asarray(self.df.loc[index - self.raw_len + 1:index, 'acoustic_data'].values, dtype=np.float32)
+        data = data.reshape(-1, data.shape[-1])
         return data, np.float32(self.target)
 
 

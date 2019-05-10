@@ -1,12 +1,12 @@
 
 name: 'model101'
 DBG: 0
-n_process: 2
+n_process: 0
 
 
 raw_len: &raw_len 150_000
-seq_len: &seq_len 1024
-vld_seg: [13, 14, 15]
+#seq_len: &seq_len 4096
+seq_len: &seq_len 8192
 
 env:
   root_path: '/media/wb/backup/work/LANL-Earthquake-Prediction'
@@ -20,16 +20,16 @@ model:
   seq_len: *seq_len
   raw_len: *raw_len
   shrinked_len: 50
-  stacks: 3
+  stacks: 2
   #layers: 26
-  #layers_per_stack: 10
-  layers_per_stack: 9
+  layers_per_stack: 12
+  #layers_per_stack: 9
   #layers_per_stack: 13
   kernel_size: 2
   in_features: 36
   #n_features: 512
-  n_blk_res: 192
-  n_blk_skip: 192
+  n_blk_res: 24
+  n_blk_skip: 24
   bias: True
   mid: 100
   init_type: 'xavier_normal'

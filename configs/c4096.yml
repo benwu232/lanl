@@ -5,7 +5,7 @@ n_process: 2
 
 
 raw_len: &raw_len 150_000
-seq_len: &seq_len 1024
+seq_len: &seq_len 4096
 vld_seg: [13, 14, 15]
 
 env:
@@ -20,16 +20,16 @@ model:
   seq_len: *seq_len
   raw_len: *raw_len
   shrinked_len: 50
-  stacks: 3
+  stacks: 4
   #layers: 26
-  #layers_per_stack: 10
-  layers_per_stack: 9
+  layers_per_stack: 11
+  #layers_per_stack: 9
   #layers_per_stack: 13
   kernel_size: 2
   in_features: 36
   #n_features: 512
-  n_blk_res: 192
-  n_blk_skip: 192
+  n_blk_res: 32
+  n_blk_skip: 32
   bias: True
   mid: 100
   init_type: 'xavier_normal'

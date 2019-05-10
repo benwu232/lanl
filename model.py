@@ -209,6 +209,34 @@ class WaveNet(nn.Module):
         return logits
 
 
+class RnnCnn(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.segment = 10
+        self.features = 20
+        self.hidden = 30
+        self.reduce_conv1 = nn.Conv1d(1, self.features, kernel_size=self.segment, stride=self.segment)
+        self.reduce_conv2 = nn.Conv1d(self.features, self.features, kernel_size=self.segment, stride=self.segment)
+        self.reduce_conv3 = nn.Conv1d(self.features, self.features, kernel_size=self.segment, stride=self.segment)
+        self.rnn = nn.GRU(self.features, self.hidden, batch_first=True)
+        self.fc = nn.Linear(self.hidden*150, 1)
+
+    def forward(self, x):
+        batch, channel, seq_len = x.shape
+        x = self.reduce_conv1(x)
+        x = F.relu(x)
+        x = self.reduce_conv2(x)
+        x = F.relu(x)
+        x = self.reduce_conv3(x)
+        x = F.relu(x)
+        x = x.permute(0, 2, 1)
+        x, h = self.rnn(x)
+        x = self.fc(x.contiguous().view(batch, -1))
+        return x
+
+
+
+
 def set_optimizer(model, optim_pars):
     if optim_pars['type'] == 'SGD':
         optimizer = SGD(model.parameters(), lr=optim_pars['lr'], weight_decay=optim_pars['l2_scale'], momentum=optim_pars['momentum'], dampening=optim_pars['dampening'], nesterov=optim_pars['nesterov'])

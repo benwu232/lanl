@@ -131,12 +131,15 @@ class WaveNet(nn.Module):
         self.n_blk_skip = pars.n_blk_skip
         self.seq_len = pars.seq_len
         self.raw_len = pars.raw_len
-        self.rows = self.raw_len // self.seq_len
+        self.segment = self.raw_len // self.seq_len
         self.mid = pars.mid
+        self.pre_features = pars.n_blk_res
+
+        self.reduce_conv = nn.Conv1d(3, self.pre_features, kernel_size=self.segment, stride=self.segment)
         if scalar_input:
             self.first_conv = Conv1d1x1(1, pars.n_blk_res)
         else:
-            self.first_conv = Conv1d1x1(self.rows+2, pars.n_blk_res)
+            self.first_conv = Conv1d1x1(self.pre_features+6, pars.n_blk_res)
 
         self.conv_layers = nn.ModuleList()
         for layer in range(layers):
@@ -221,10 +224,11 @@ class WaveNet(nn.Module):
         batch_size, _, raw_len = x.shape
         #rows = raw_len // self.seq_len
         x_scaled, avg, std = standardize(x, dim=2)
-        x_scaled = x_scaled.view(-1, self.rows, self.seq_len)
+        x_prepro = self.reduce_conv(x_scaled)
+
         mean = avg.expand(-1, -1, self.seq_len)
         std = std.expand(-1, -1, self.seq_len)
-        x_cat = torch.cat([x_scaled, mean, std], dim=1)
+        x_cat = torch.cat([x_prepro, mean, std], dim=1)
 
         # Feed data to network
         x = self.first_conv(x_cat)
