@@ -5,7 +5,7 @@ n_process: 2
 
 
 raw_len: &raw_len 150_000
-seq_len: &seq_len 1024
+seq_len: &seq_len 4096
 vld_seg: [13, 14, 15]
 
 env:
@@ -20,20 +20,20 @@ model:
   seq_len: *seq_len
   raw_len: *raw_len
   shrinked_len: 50
-  stacks: 3
+  stacks: 2
   #layers: 26
   #layers_per_stack: 10
-  layers_per_stack: 9
-  #layers_per_stack: 13
+  #layers_per_stack: 9
+  layers_per_stack: 13
   kernel_size: 2
   in_features: 36
   #n_features: 512
-  n_blk_res: 192
-  n_blk_skip: 192
-  bias: True
-  mid: 100
-  init_type: 'xavier_normal'
-  act_type: 'tanh'
+  n_filters: 32
+  use_bias: True
+  l2_factor: 0.0
+  final_l2_factor: 0.0
+  n_out_filters: 40
+
   #wn_dropout_keep: 0.95
   wn_dropout_keep: 1.0
   #norm_type: 'batch_norm'
@@ -56,7 +56,7 @@ trn:
   batch_size: 32
   batches_per_epoch: 500
   n_epoch: 600
-  patience: 100
+  patience: 30
   balance: 0
   method: 1
   true_wd: True

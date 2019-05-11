@@ -19,8 +19,8 @@ from functools import partial
 import torchvision
 import pprint
 from torchsummary import summary
-# from utils import *
-# from models import *
+#from utils import *
+#from models import *
 from dataset import *
 from framework import *
 from wavenet import *
@@ -29,14 +29,14 @@ from model_kr import *
 
 def run(config):
     config.env.update(init_env(config))
+
     if config.DBG:
         nrows = 30_000_000
-        df = pd.read_csv(config.env.pdir.data / 'train.csv', nrows=nrows,
-                         dtype={'acoustic_data': np.int16, 'time_to_failure': np.float64})
+        df = pd.read_csv(config.env.pdir.data/'train.csv', nrows=nrows, dtype={'acoustic_data': np.int16, 'time_to_failure': np.float64})
     else:
-        df = load_dump(config.env.pdir.data / f'train_df.pkl')
-    # extend_df(df)
-    # vld_range = split_ds(df)
+        df = load_dump(config.env.pdir.data/f'train_df.pkl')
+    #extend_df(df)
+    #vld_range = split_ds(df)
     ds_len = len(df)
 
     X_train = df.acoustic_data.values
@@ -53,67 +53,35 @@ def run(config):
         x_sum += X_train[config.seg_spans[s][0]:config.seg_spans[s][1]].sum()
         count += (config.seg_spans[s][1] - config.seg_spans[s][0])
 
-    X_train_mean = x_sum / count
+    X_train_mean = x_sum/count
 
     x2_sum = 0.
     for s in config.trn_seg:
         x2_sum += np.power(X_train[config.seg_spans[s][0]:config.seg_spans[s][1]] - X_train_mean, 2).sum()
 
-    X_train_std = np.sqrt(x2_sum / count)
+    X_train_std = np.sqrt(x2_sum/count)
 
     print(X_train_mean, X_train_std)
 
-    trn_gen = EarthQuakeRandom(
-        x=X_train,
-        y=y_train,
-        x_mean=X_train_mean,
-        x_std=X_train_std,
-        segments=config.trn_seg,
-        seg_spans=config.seg_spans,
-        ts_length=150000,
-        batch_size=64,
-        steps_per_epoch=400,
-        pars=config.ds
-    )
 
-    vld_gen = EarthQuakeRandom(
-        x=X_train,
-        y=y_train,
-        x_mean=X_train_mean,
-        x_std=X_train_std,
-        segments=config.vld_seg,
-        seg_spans=config.seg_spans,
-        ts_length=150000,
-        batch_size=64,
-        steps_per_epoch=400,
-        pars=config.ds
-    )
+    test_data, test_ids = load_test(config.env.pdir)
 
-    model = sel_model(config.model)
-    model_name = config.model.name
-    model.compile(loss='mean_absolute_error', optimizer='adam')
-    model.summary()
+    X_test = ((test_data - X_train_mean)/ X_train_std).astype('float32')
+    X_test = np.expand_dims(X_test, 2)
+    X_test.shape
 
-    hist = model.fit_generator(
-        generator=trn_gen,
-        epochs=config.trn.n_epoch,
-        verbose=1,
-        validation_data=vld_gen,
-        callbacks=[
-            EarlyStopping(monitor='val_loss', patience=config.trn.patience, verbose=1),
-            ModelCheckpoint(filepath=str(config.env.pdir.models / f'{model_name}.h5'), monitor='val_loss',
-                            save_best_only=True, verbose=1)],
-        workers=2,
-        use_multiprocessing=True
-    )
+    model_name = 'rnn_cnn'
+    model = load_model(str(config.env.pdir.models/f'{model_name}.h5'))
 
-    plt.plot(hist.history['loss'])
-    plt.plot(hist.history['val_loss'])
-    plt.title('Model loss')
-    plt.ylabel('Loss')
-    plt.xlabel('Epoch')
-    _ = plt.legend(['Train', 'Test'], loc='upper left')
-    plt.show()
+
+    y_pred = model.predict(X_test)
+
+    submission_df = pd.DataFrame({'seg_id': test_ids, 'time_to_failure': y_pred[:, 0]})
+
+    submission_df.to_csv(str(config.env.pdir.models/"submission.csv"), index=False)
+
+
+
 
 
 def parse_args():
@@ -132,7 +100,7 @@ def main():
     print('Train humpback whale identification')
     args = parse_args()
     if args.config_file is None:
-        # raise Exception('no configuration file')
+        #raise Exception('no configuration file')
         config = None
     else:
         config = load_config(args.config_file)
@@ -143,3 +111,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+

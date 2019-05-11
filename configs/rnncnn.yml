@@ -1,0 +1,100 @@
+
+name: 'model101'
+DBG: 0
+n_process: 2
+
+
+raw_len: &raw_len 150_000
+seq_len: &seq_len 1024
+vld_seg: [13, 14, 15]
+
+env:
+  root_path: '/media/wb/backup/work/LANL-Earthquake-Prediction'
+  data_path: ~
+  with_log: 0
+  with_tblog: 0
+
+model:
+  name: 'RnnCnn'
+  legacy: False
+  seq_len: *seq_len
+  raw_len: *raw_len
+  shrinked_len: 50
+  stacks: 3
+  #layers: 26
+  #layers_per_stack: 10
+  layers_per_stack: 9
+  #layers_per_stack: 13
+  kernel_size: 2
+  in_features: 36
+  #n_features: 512
+
+
+  n_blk_res: 192
+  n_blk_skip: 192
+  bias: True
+  mid: 100
+  init_type: 'xavier_normal'
+  act_type: 'tanh'
+  #wn_dropout_keep: 0.95
+  wn_dropout_keep: 1.0
+  #norm_type: 'batch_norm'
+  norm_type: 'none'
+  fc_dropout_keep: 1.0
+  use_weight_norm: False
+
+opt:
+  type: 'Adam'
+  lr: !!float 1e-3
+  beta1: 0.9
+  beta2: 0.999
+  weight_decay: !!float 1e-4
+  epsilon: !!float 1e-8
+
+trn:
+  #pretrained_file: 'Arc_11'
+  #pretrained_file: 'CosNet-known-densenet121-best'
+  #pretrained_file: 'CosNet-known-densenet121-8'
+  batch_size: 32
+  batches_per_epoch: 500
+  n_epoch: 600
+  patience: 100
+  balance: 0
+  method: 1
+  true_wd: True
+  wd: !!float 1e-2
+  max_lr: !!float 1e-3
+  #true_wd: False
+  #wd: !!float 3e-5
+  find_lr: 0
+  epoch_len: 10_000
+
+vld:
+  batch_size: 64
+  epoch_len: 2_000
+
+ds:
+  fix_seed: 1
+  k_fold: 5
+  fold: 4
+  raw_len: *raw_len
+  seq_len: *seq_len
+
+loss:
+  name: 'MAE'
+  reduction: 'mean'
+
+
+
+#transform:
+#  name: 'align_transform'
+#  num_preprocessor: 6
+#  params:
+#    size: 320
+#    align: True
+#    align_p: 0.5
+
+scoreboard:
+  len: 11
+  sort: 'dec'
+
