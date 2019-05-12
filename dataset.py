@@ -49,7 +49,7 @@ def extend_df(df):
 
 class EarthQuakeRandom(keras.utils.Sequence):
 
-    def __init__(self, x, y, x_mean, x_std, segments, seg_spans, ts_length, batch_size, steps_per_epoch, pars):
+    def __init__(self, x, y, segments, seg_spans, ts_length, batch_size, steps_per_epoch, pars):
         self.x = x
         self.y = y
         self.segments = segments
@@ -59,8 +59,6 @@ class EarthQuakeRandom(keras.utils.Sequence):
         self.steps_per_epoch = steps_per_epoch
         self.segments_size = np.array([self.seg_spans[s][1] - self.seg_spans[s][0] for s in segments])
         self.segments_p = self.segments_size / self.segments_size.sum()
-        self.x_mean = x_mean
-        self.x_std = x_std
         self.raw_len = pars.raw_len
         self.seq_len = pars.seq_len
         self.seg_len = self.raw_len // self.seq_len
@@ -85,6 +83,27 @@ class EarthQuakeRandom(keras.utils.Sequence):
         return self.steps_per_epoch
 
     def __getitem__(self, idx):
+        segment_index = np.random.choice(self.segments, p=self.segments_p)
+        end_indexes = np.random.randint(self.seg_spans[segment_index][0] + self.ts_length, self.seg_spans[segment_index][1], size=self.batch_size)
+
+        x_batch = np.empty((self.batch_size, self.real_len))
+        y_batch = np.empty(self.batch_size, )
+
+        for i, end in enumerate(end_indexes):
+            x_batch[i, :] = self.x[end - self.real_len: end]
+            y_batch[i] = self.y[end - 1]
+
+        x_batch = np.expand_dims(x_batch, axis=2)
+        mean = x_batch.mean(axis=1, keepdims=True)
+        std = x_batch.std(axis=1, keepdims=True)
+        x_scaled = (x_batch - mean) / std
+        mean_ex = mean.repeat(self.real_len, axis=1)
+        std_ex = std.repeat(self.real_len, axis=1)
+        x_batch = np.concatenate([x_scaled, mean_ex, std_ex], axis=-1)
+
+        return x_batch, y_batch
+
+    def __getitem__2(self, idx):
         segment_index = np.random.choice(self.segments, p=self.segments_p)
         end_indexes = np.random.randint(self.seg_spans[segment_index][0] + self.ts_length, self.seg_spans[segment_index][1], size=self.batch_size)
 

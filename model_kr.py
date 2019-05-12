@@ -130,7 +130,14 @@ def WaveNet(pars):
         res_x = keras.layers.Add()([original_x, res_x])
         return res_x, skip_x
 
-    input = Input(shape=(real_len, 1), name='input_seq')
+    input = Input(shape=(real_len, 3), name='input_seq')
+    #std = keras.backend.std(input, axis=1, keepdims=True)
+    #mean = keras.backend.mean(input, axis=1, keepdims=True)
+    #x_scaled = (input - mean) / std
+    #std_ex = keras.backend.repeat_elements(std, input.shape[1].value, axis=1)
+    #mean_ex = keras.backend.repeat_elements(mean, input.shape[1].value, axis=1)
+    #x = keras.layers.concatenate(axis=-1)([x_scaled, std_ex, mean_ex])
+
     skip_connections = []
     x = Conv1D(pars.n_filters, kernel_size=seg_len, strides=seg_len, name='feature_reduction')(input)
     #x = CausalConv1D(pars.n_filters, 2,

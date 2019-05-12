@@ -46,28 +46,28 @@ def run(config):
     config.ds.n_seg = len(config.ds.seg_spans)
     config.ds.trn_seg = list(set(range(config.ds.n_seg)) - set(config.ds.vld_seg))
 
-    x_sum = 0.
-    count = 0
+    #x_sum = 0.
+    #count = 0
 
-    for s in config.ds.trn_seg:
-        x_sum += X_train[config.ds.seg_spans[s][0]:config.ds.seg_spans[s][1]].sum()
-        count += (config.ds.seg_spans[s][1] - config.ds.seg_spans[s][0])
+    #for s in config.ds.trn_seg:
+    #    x_sum += X_train[config.ds.seg_spans[s][0]:config.ds.seg_spans[s][1]].sum()
+    #    count += (config.ds.seg_spans[s][1] - config.ds.seg_spans[s][0])
 
-    X_train_mean = x_sum / count
+    #X_train_mean = x_sum / count
 
-    x2_sum = 0.
-    for s in config.ds.trn_seg:
-        x2_sum += np.power(X_train[config.ds.seg_spans[s][0]:config.ds.seg_spans[s][1]] - X_train_mean, 2).sum()
+    #x2_sum = 0.
+    #for s in config.ds.trn_seg:
+    #    x2_sum += np.power(X_train[config.ds.seg_spans[s][0]:config.ds.seg_spans[s][1]] - X_train_mean, 2).sum()
 
-    X_train_std = np.sqrt(x2_sum / count)
+    #X_train_std = np.sqrt(x2_sum / count)
 
-    print(X_train_mean, X_train_std)
+    #print(X_train_mean, X_train_std)
 
     trn_gen = EarthQuakeRandom(
         x=X_train,
         y=y_train,
-        x_mean=X_train_mean,
-        x_std=X_train_std,
+        #x_mean=X_train_mean,
+        #x_std=X_train_std,
         segments=config.ds.trn_seg,
         seg_spans=config.ds.seg_spans,
         ts_length=config.raw_len,
@@ -79,8 +79,8 @@ def run(config):
     vld_gen = EarthQuakeRandom(
         x=X_train,
         y=y_train,
-        x_mean=X_train_mean,
-        x_std=X_train_std,
+        #x_mean=X_train_mean,
+        #x_std=X_train_std,
         segments=config.ds.vld_seg,
         seg_spans=config.ds.seg_spans,
         ts_length=config.raw_len,
