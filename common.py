@@ -73,6 +73,10 @@ def init_logger(name='qf', to_console=True, log_file=None, level=logging.DEBUG,
 
     return logger
 
+def log_print(msg, config):
+    if config.env.with_log:
+        config.env.plog.info(msg)
+
 
 def linear_decay(step, pars):
     start_value = pars[0]
@@ -239,21 +243,21 @@ def init_env(config):
     if 'root_path' in config.env:
         env.pdir = BaseDirs(config.env.root_path, config.env.data_path)
         pdir = env.pdir
-        #prefix = f'{env.timestamp}-{config.task.name}'
-        prefix = f'{env.timestamp}'
+        #name = f'{env.timestamp}-{config.task.name}'
 
         with_log = set_par(config.env, 'with_log', False)
         if with_log:
-            if 'prefix' not in config.task:
-                config.task.prefix = ''
-            plog_file = env.pdir.log/f'{env.timestamp}_{config.task.prefix}.log'
+            if 'name' not in config:
+                config.name = ''
+            id_name = f'{env.timestamp}_{config.name}'
+            plog_file = env.pdir.log/f'{id_name}.log'
             #global plog
             env.plog = init_logger(log_file=plog_file)
 
         with_tblog = set_par(config.env, 'with_tblog', False)
         if with_tblog:
             import tensorboardX as tx
-            env.tblog = tx.SummaryWriter(str(env.pdir.tblog/prefix))
+            env.tblog = tx.SummaryWriter(str(env.pdir.tblog/id_name))
 
     return env
 

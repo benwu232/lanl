@@ -1,17 +1,17 @@
 
-name: 'model101'
+name: 'lanl'
 DBG: 0
 n_process: 2
 
 
 raw_len: &raw_len 150_000
 seq_len: &seq_len 4096
-vld_seg: [13, 14, 15]
+vld_idx: 0
 
 env:
   root_path: '/media/wb/backup/work/LANL-Earthquake-Prediction'
   data_path: ~
-  with_log: 0
+  with_log: 1
   with_tblog: 0
 
 model:
@@ -31,7 +31,7 @@ model:
   #n_features: 512
   n_filters: 64
   use_bias: True
-  l2_factor: !!float 1e-5
+  l2_factor: !!float 1e-4
   final_l2_factor: 0.0
   n_out_filters: 40
 
@@ -53,7 +53,7 @@ trn:
   #pretrained_file: 'Arc_11'
   #pretrained_file: 'CosNet-known-densenet121-best'
   #pretrained_file: 'CosNet-known-densenet121-8'
-  batch_size: 32
+  batch_size: 64
   batches_per_epoch: 500
   n_epoch: 600
   patience: 100
@@ -65,13 +65,13 @@ trn:
   #true_wd: False
   #wd: !!float 3e-5
   find_lr: 0
-  epoch_len: 10_000
 
 vld:
   batch_size: 64
-  epoch_len: 2_000
+  batches_per_epoch: 400
 
 ds:
+  vld_seg: [13, 14, 15]
   fix_seed: 1
   k_fold: 5
   fold: 4

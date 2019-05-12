@@ -29,35 +29,35 @@ from model_kr import *
 
 def run(config):
     config.env.update(init_env(config))
+    print_log = partial(log_print, config=config)
+    print_log(pprint.pformat(config))
+
     if config.DBG:
         nrows = 30_000_000
         df = pd.read_csv(config.env.pdir.data / 'train.csv', nrows=nrows,
                          dtype={'acoustic_data': np.int16, 'time_to_failure': np.float64})
     else:
         df = load_dump(config.env.pdir.data / f'train_df.pkl')
-    # extend_df(df)
-    # vld_range = split_ds(df)
-    ds_len = len(df)
 
     X_train = df.acoustic_data.values
     y_train = df.time_to_failure.values
 
-    config.seg_spans = segment_df(df, config.raw_len)
-    config.n_seg = len(config.seg_spans)
-    config.trn_seg = list(set(range(config.n_seg)) - set(config.vld_seg))
+    config.ds.seg_spans = segment_df(df, config.raw_len)
+    config.ds.n_seg = len(config.ds.seg_spans)
+    config.ds.trn_seg = list(set(range(config.ds.n_seg)) - set(config.ds.vld_seg))
 
     x_sum = 0.
     count = 0
 
-    for s in config.trn_seg:
-        x_sum += X_train[config.seg_spans[s][0]:config.seg_spans[s][1]].sum()
-        count += (config.seg_spans[s][1] - config.seg_spans[s][0])
+    for s in config.ds.trn_seg:
+        x_sum += X_train[config.ds.seg_spans[s][0]:config.ds.seg_spans[s][1]].sum()
+        count += (config.ds.seg_spans[s][1] - config.ds.seg_spans[s][0])
 
     X_train_mean = x_sum / count
 
     x2_sum = 0.
-    for s in config.trn_seg:
-        x2_sum += np.power(X_train[config.seg_spans[s][0]:config.seg_spans[s][1]] - X_train_mean, 2).sum()
+    for s in config.ds.trn_seg:
+        x2_sum += np.power(X_train[config.ds.seg_spans[s][0]:config.ds.seg_spans[s][1]] - X_train_mean, 2).sum()
 
     X_train_std = np.sqrt(x2_sum / count)
 
@@ -68,11 +68,11 @@ def run(config):
         y=y_train,
         x_mean=X_train_mean,
         x_std=X_train_std,
-        segments=config.trn_seg,
-        seg_spans=config.seg_spans,
-        ts_length=150000,
-        batch_size=64,
-        steps_per_epoch=400,
+        segments=config.ds.trn_seg,
+        seg_spans=config.ds.seg_spans,
+        ts_length=config.raw_len,
+        batch_size=config.trn.batch_size,
+        steps_per_epoch=config.trn.batches_per_epoch,
         pars=config.ds
     )
 
@@ -81,15 +81,15 @@ def run(config):
         y=y_train,
         x_mean=X_train_mean,
         x_std=X_train_std,
-        segments=config.vld_seg,
-        seg_spans=config.seg_spans,
-        ts_length=150000,
-        batch_size=64,
-        steps_per_epoch=400,
+        segments=config.ds.vld_seg,
+        seg_spans=config.ds.seg_spans,
+        ts_length=config.raw_len,
+        batch_size=config.vld.batch_size,
+        steps_per_epoch=config.trn.batches_per_epoch,
         pars=config.ds
     )
 
-    if 'model_file' in config.model or (config.env.pdir.models/config.model.model_file).is_file():
+    if 'model_file' in config.model and (config.env.pdir.models/config.model.model_file).is_file():
         model = load_model(str(config.env.pdir.models/config.model.model_file))
     else:
         model = sel_model(config.model)
@@ -103,9 +103,9 @@ def run(config):
         verbose=1,
         validation_data=vld_gen,
         callbacks=[
+            keras.callbacks.CSVLogger(str(config.env.pdir.log/f'{config.env.timestamp}_{config.name}.csv'), append=True),
             EarlyStopping(monitor='val_loss', patience=config.trn.patience, verbose=1),
-            ModelCheckpoint(filepath=str(config.env.pdir.models / f'{model_name}.h5'), monitor='val_loss',
-                            save_best_only=True, verbose=1)],
+            ModelCheckpoint(filepath=str(config.env.pdir.models / f'{model_name}.h5'), monitor='val_loss', save_best_only=True, verbose=1)],
         workers=2,
         #use_multiprocessing=True
     )
