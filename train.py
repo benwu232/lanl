@@ -89,9 +89,12 @@ def run(config):
         pars=config.ds
     )
 
-    model = sel_model(config.model)
-    model_name = config.model.name
-    model.compile(loss='mean_absolute_error', optimizer='adam')
+    if 'model_file' in config.model or (config.env.pdir.models/config.model.model_file).is_file():
+        model = load_model(str(config.env.pdir.models/config.model.model_file))
+    else:
+        model = sel_model(config.model)
+        model_name = config.model.name
+        model.compile(loss='mean_absolute_error', optimizer='adam')
     model.summary()
 
     hist = model.fit_generator(
@@ -104,7 +107,7 @@ def run(config):
             ModelCheckpoint(filepath=str(config.env.pdir.models / f'{model_name}.h5'), monitor='val_loss',
                             save_best_only=True, verbose=1)],
         workers=2,
-        use_multiprocessing=True
+        #use_multiprocessing=True
     )
 
     plt.plot(hist.history['loss'])

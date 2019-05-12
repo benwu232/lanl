@@ -52,9 +52,11 @@ def compute_receptive_field(dilation_depth, nb_stacks):
     return receptive_field
 
 class CausalConv1D(Conv1D):
-    def __init__(self, filters, kernel_size, init='glorot_uniform', activation=None,
-                 padding='valid', strides=1, dilation_rate=1, bias_regularizer=None,
-                 activity_regularizer=None, kernel_constraint=None, bias_constraint=None, use_bias=True, causal=True, **kwargs):
+    def __init__(self, filters, kernel_size, init='glorot_uniform',
+                 activation=None, padding='valid', strides=1, dilation_rate=1,
+                 bias_regularizer=None, bias_constraint=None,
+                 kernel_regularizer=None, kernel_constraint=None,
+                 activity_regularizer=None, use_bias=True, causal=True, **kwargs):
         super().__init__(
             filters,
             kernel_size=kernel_size,
@@ -64,6 +66,7 @@ class CausalConv1D(Conv1D):
             activation=activation,
             use_bias=use_bias,
             kernel_initializer=init,
+            kernel_regularizer=kernel_regularizer,
             activity_regularizer=activity_regularizer,
             bias_regularizer=bias_regularizer,
             kernel_constraint=kernel_constraint,
@@ -92,7 +95,7 @@ class CausalConv1D(Conv1D):
     def call(self, x):
         if self.causal:
             x = asymmetric_temporal_padding(x, self.dilation_rate[0] * (self.kernel_size[0] - 1), 0)
-        return super(CausalConv1D, self).call(x)
+        return super().call(x)
 
 
 
@@ -105,53 +108,57 @@ def WaveNet(pars):
 
     def wavenet_blk(x):
         original_x = x
+        x = keras.layers.Dropout(pars.wn_dropout)(x)
         # TODO: initalization, regularization?
         # Note: The AtrousConvolution1D with the 'causal' flag is implemented in github.com/basveeling/keras#@wavenet.
         tanh_out = CausalConv1D(pars.n_filters, 2, dilation_rate=2 ** i, padding='valid', causal=True,
                                 use_bias=pars.use_bias,
                                 name='dilated_conv_%d_tanh_s%d' % (2 ** i, s), activation='tanh',
+                                bias_regularizer=l2(pars.l2_factor),
                                 kernel_regularizer=l2(pars.l2_factor))(x)
         sigm_out = CausalConv1D(pars.n_filters, 2, dilation_rate=2 ** i, padding='valid', causal=True,
                                 use_bias=pars.use_bias,
                                 name='dilated_conv_%d_sigm_s%d' % (2 ** i, s), activation='sigmoid',
+                                bias_regularizer=l2(pars.l2_factor),
                                 kernel_regularizer=l2(pars.l2_factor))(x)
         x = keras.layers.Multiply(name='gated_activation_%d_s%d' % (i, s))([tanh_out, sigm_out])
 
-        res_x = Conv1D(pars.n_filters, 1, padding='same', use_bias=pars.use_bias, kernel_regularizer=l2(pars.l2_factor))(x)
-        skip_x = Conv1D(pars.n_filters, 1, padding='same', use_bias=pars.use_bias, kernel_regularizer=l2(pars.l2_factor))(x)
+        res_x = Conv1D(pars.n_filters, 1, padding='same', use_bias=pars.use_bias,
+                       kernel_regularizer=l2(pars.l2_factor))(x)
+        skip_x = Conv1D(pars.n_filters, 1, padding='same', use_bias=pars.use_bias,
+                        kernel_regularizer=l2(pars.l2_factor))(x)
         res_x = keras.layers.Add()([original_x, res_x])
         return res_x, skip_x
 
     input = Input(shape=(real_len, 1), name='input_seq')
-    out = input
     skip_connections = []
-    #out = Conv1D(pars.n_filters, kernel_size=seg_len, strides=seg_len, activation='relu')(input)
-    out = Conv1D(pars.n_filters, kernel_size=seg_len, strides=seg_len)(input)
-    #out = CausalConv1D(pars.n_filters, 2,
+    x = Conv1D(pars.n_filters, kernel_size=seg_len, strides=seg_len, name='feature_reduction')(input)
+    #x = CausalConv1D(pars.n_filters, 2,
     #                   dilation_rate=1,
     #                   padding='valid',
     #                   causal=True,
     #                   name='initial_causal_conv'
-    #                   )(out)
+    #                   )(x)
     for s in range(pars.stacks):
         for i in range(0, pars.layers_per_stack):
-            out, skip_out = wavenet_blk(out)
+            x, skip_out = wavenet_blk(x)
             skip_connections.append(skip_out)
 
-    out = keras.layers.Add()(skip_connections)
-    out = keras.layers.Activation('relu')(out)
-    out = Conv1D(pars.n_out_filters, 1, padding='same', kernel_regularizer=l2(pars.final_l2_factor))(out)
-    out = keras.layers.Activation('relu')(out)
-    out = Conv1D(1, 1, padding='same')(out)
-    out = Flatten()(out)
-    out = Dense(1, name='main_output')(out)
+    x = keras.layers.Add()(skip_connections)
+    x = keras.layers.Activation('relu')(x)
+    x = Conv1D(pars.n_out_filters, 1, padding='same', kernel_regularizer=l2(pars.l2_factor))(x)
+    x = keras.layers.Activation('relu')(x)
+    x = Conv1D(1, 1, padding='same', kernel_regularizer=l2(pars.l2_factor))(x)
+    x = Flatten()(x)
+    x = keras.layers.Dropout(pars.fc_dropout)(x)
+    out = Dense(1, name='main_output', kernel_regularizer=l2(pars.l2_factor))(x)
 
 
     #if not learn_all_outputs:
     #    raise DeprecationWarning('Learning on just all outputs is wasteful, now learning only inside receptive field.')
-    #    out = layers.Lambda(lambda x: x[:, -1, :], output_shape=(out._keras_shape[-1],))(out)  # Based on gif in deepmind blog: take last output?
+    #    x = layers.Lambda(lambda x: x[:, -1, :], output_shape=(x._keras_shape[-1],))(x)  # Based on gif in deepmind blog: take last output?
 
-    #out = layers.Activation('softmax', name="output_softmax")(out)
+    #x = layers.Activation('softmax', name="output_softmax")(x)
     model = Model(input, out)
 
     receptive_field = compute_receptive_field(pars.layers_per_stack, pars.stacks)
