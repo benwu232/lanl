@@ -97,15 +97,22 @@ def run(config):
         model.compile(loss='mean_absolute_error', optimizer='adam')
     model.summary()
 
+    tb_cb = keras.callbacks.TensorBoard(log_dir=str(config.env.pdir.tblog), histogram_freq=1, write_graph=True, write_images=False)
+
+    cbs=[
+        keras.callbacks.CSVLogger(str(config.env.pdir.log/f'{config.env.timestamp}_{config.name}.csv'), append=True),
+        EarlyStopping(monitor='val_loss', patience=config.trn.patience, verbose=1),
+        ModelCheckpoint(filepath=str(config.env.pdir.models / f'{model_name}.h5'), monitor='val_loss', save_best_only=True, verbose=1)]
+
+    if config.env.with_tblog:
+        cbs.append(tb_cb)
+
     hist = model.fit_generator(
         generator=trn_gen,
         epochs=config.trn.n_epoch,
         verbose=1,
         validation_data=vld_gen,
-        callbacks=[
-            keras.callbacks.CSVLogger(str(config.env.pdir.log/f'{config.env.timestamp}_{config.name}.csv'), append=True),
-            EarlyStopping(monitor='val_loss', patience=config.trn.patience, verbose=1),
-            ModelCheckpoint(filepath=str(config.env.pdir.models / f'{model_name}.h5'), monitor='val_loss', save_best_only=True, verbose=1)],
+        callbacks=cbs,
         workers=2,
         #use_multiprocessing=True
     )
