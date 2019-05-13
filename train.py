@@ -32,6 +32,13 @@ def run(config):
     print_log = partial(log_print, config=config)
     print_log(pprint.pformat(config))
 
+    id = f'{config.name}_{config.model.name}_{config.model.n_filters}_s[{config.model.stacks}]_wnd[{config.model.wn_dropout}]_fcd[{config.model.fc_dropout}]_l2[{config.model.l2_factor}]_{config.model.merge_type}'
+
+    scoreboard_file = config.env.pdir.models/f'scoreboard-{id}.pkl'
+    scoreboard = Scoreboard(scoreboard_file,
+                            config.scoreboard.len,
+                            sort=config.scoreboard.sort)
+
     if config.DBG:
         nrows = 30_000_000
         df = pd.read_csv(config.env.pdir.data / 'train.csv', nrows=nrows,
@@ -97,11 +104,12 @@ def run(config):
         model.compile(loss='mean_absolute_error', optimizer='adam')
     model.summary()
 
-    tb_cb = keras.callbacks.TensorBoard(log_dir=str(config.env.pdir.tblog), histogram_freq=1, write_graph=True, write_images=False)
+    tb_cb = keras.callbacks.TensorBoard(log_dir=str(config.env.pdir.tblog/f'{config.env.timestamp}_{config.name}'), histogram_freq=0, write_graph=True, write_images=False)
 
     cbs=[
         keras.callbacks.CSVLogger(str(config.env.pdir.log/f'{config.env.timestamp}_{config.name}.csv'), append=True),
         EarlyStopping(monitor='val_loss', patience=config.trn.patience, verbose=1),
+        ManagerCb(scoreboard, monitor='val_loss', patience=config.trn.patience, id=id, mode=config.scoreboard.sort, config=config, verbose=1),
         ModelCheckpoint(filepath=str(config.env.pdir.models / f'{model_name}.h5'), monitor='val_loss', save_best_only=True, verbose=1)]
 
     if config.env.with_tblog:

@@ -1,5 +1,10 @@
 import keras
+import numpy as np
+import warnings
 import tensorflow as tf
+import copy
+from pathlib import Path
+import pprint
 import keras.backend as K
 from keras.models import Sequential, Model
 from keras.layers import Dropout, Dense, Flatten, BatchNormalization
@@ -11,6 +16,8 @@ from keras.regularizers import *
 from keras.engine.input_layer import Input
 from keras.utils.conv_utils import conv_output_length
 from keras.models import load_model
+from common import *
+
 
 
 def sel_model(pars):
@@ -234,3 +241,290 @@ def WaveNet1(pars):
     return model
 
 
+class ManagerCb(keras.callbacks.Callback):
+    """Stop training when a monitored quantity has stopped improving.
+    # Arguments
+        monitor: quantity to be monitored.
+        min_delta: minimum change in the monitored quantity
+            to qualify as an improvement, i.e. an absolute
+            change of less than min_delta, will count as no
+            improvement.
+        patience: number of epochs with no improvement
+            after which training will be stopped.
+        verbose: verbosity mode.
+        mode: one of {auto, min, max}. In `min` mode,
+            training will stop when the quantity
+            monitored has stopped decreasing; in `max`
+            mode it will stop when the quantity
+            monitored has stopped increasing; in `auto`
+            mode, the direction is automatically inferred
+            from the name of the monitored quantity.
+        baseline: Baseline value for the monitored quantity to reach.
+            Training will stop if the model doesn't show improvement
+            over the baseline.
+        restore_best_weights: whether to restore model weights from
+            the epoch with the best value of the monitored quantity.
+            If False, the model weights obtained at the last step of
+            training are used.
+    """
+
+    def __init__(self,
+                 scoreboard,
+                 monitor='val_loss',
+                 min_delta=0,
+                 patience=0,
+                 verbose=0,
+                 mode='auto',
+                 baseline=None,
+                 restore_best_weights=False,
+                 id=None,
+                 config=None):
+        super().__init__()
+        self.scoreboard = scoreboard
+        self.config = config
+        self.monitor = monitor
+        self.baseline = baseline
+        self.patience = patience
+        self.verbose = verbose
+        self.min_delta = min_delta
+        self.wait = 0
+        self.stopped_epoch = 0
+        self.restore_best_weights = restore_best_weights
+        self.best_weights = None
+
+        self.id = id
+
+        if mode not in ['auto', 'min', 'max', 'dec', 'inc']:
+            warnings.warn('EarlyStopping mode %s is unknown, '
+                          'fallback to auto mode.' % mode,
+                          RuntimeWarning)
+            mode = 'auto'
+
+        if mode in ['min', 'inc']:
+            self.monitor_op = np.less
+            sb_sort = 'inc'
+        elif mode in ['max', 'dec']:
+            self.monitor_op = np.greater
+            sb_sort = 'dec'
+        else:
+            if 'acc' in self.monitor:
+                self.monitor_op = np.greater
+                sb_sort = 'dec'
+            else:
+                self.monitor_op = np.less
+                sb_sort = 'inc'
+
+        if self.monitor_op == np.greater:
+            self.min_delta *= 1
+        else:
+            self.min_delta *= -1
+
+        if isinstance(scoreboard, Scoreboard):
+            self.scoreboard = scoreboard
+        else:
+            if isinstance(scoreboard, Path):
+                self.scoreboard_file = scoreboard
+            elif isinstance(scoreboard, str):
+                if 'scoreboard' in scoreboard:
+                    self.scoreboard_file = Path(scoreboard)
+                else:
+                    self.scoreboard_file = pdir.models/f'scoreboard-{scoreboard}.pkl'
+            self.sb_len = config.scoreboard.len
+            self.scoreboard = Scoreboard(self.scoreboard_file, self.sb_len, sort=sb_sort)
+
+    def on_train_begin(self, logs=None):
+        # Allow instances to be re-used
+        self.wait = 0
+        self.stopped_epoch = 0
+        if self.baseline is not None:
+            self.best = self.baseline
+        else:
+            self.best = np.Inf if self.monitor_op == np.less else -np.Inf
+
+    def on_epoch_end(self, epoch, logs=None):
+        current = self.get_monitor_value(logs)
+        if current is None:
+            return
+
+        if self.monitor_op(current - self.min_delta, self.best):
+            self.best = current
+            self.wait = 0
+            if self.restore_best_weights:
+                self.best_weights = self.model.get_weights()
+        else:
+            self.wait += 1
+            if self.wait >= self.patience:
+                self.stopped_epoch = epoch
+                self.model.stop_training = True
+                if self.restore_best_weights:
+                    if self.verbose > 0:
+                        print('Restoring model weights from the end of '
+                              'the best epoch')
+                    self.model.set_weights(self.best_weights)
+
+        if not self.scoreboard.is_full() or self.monitor_op(current, self.scoreboard[-1]['score']):
+            store_file = f'{self.id}-{epoch}'
+            save_path = str(self.config.env.pdir.models/store_file)
+
+            self.model.save(save_path, overwrite=True)
+            self.config.env.plog.info('$$$$$$$$$$$$$ Good score {} at training step {} $$$$$$$$$'.format(current, epoch))
+            self.config.env.plog.info(f'save to {save_path}')
+            update_dict = {'score': current,
+                           'epoch': epoch,
+                           'timestamp': start_timestamp,
+                           'config': pprint.pformat(self.config),
+                           'file': save_path
+                           }
+            self.scoreboard.update(update_dict)
+
+    def on_train_end(self, logs=None):
+        if self.stopped_epoch > 0 and self.verbose > 0:
+            print('Epoch %05d: early stopping' % (self.stopped_epoch + 1))
+
+    def get_monitor_value(self, logs):
+        monitor_value = logs.get(self.monitor)
+        if monitor_value is None:
+            warnings.warn(
+                'Early stopping conditioned on metric `%s` '
+                'which is not available. Available metrics are: %s' %
+                (self.monitor, ','.join(list(logs.keys()))), RuntimeWarning
+            )
+        return monitor_value
+
+
+
+class ScoreboardCallback(keras.callbacks.Callback):
+    def __init__(self, scoreboard, monitor:str='val_score', mode:str='auto', config=None):
+        #super().__init__( monitor=monitor, mode=mode)
+        self.prefix = f'{config.task.name}-{config.model.backbone}'
+        self.monitor = monitor
+        self.config = config
+        self.best_score = 0
+        self.mode = mode
+        self.sort = config.scoreboard.sort
+        if self.sort == 'dec':
+            self.operator = np.greater
+        else:
+            self.operator = np.less
+        if monitor == 'val_loss':
+            self.best_score = np.inf
+            self.mode = 'min'
+            self.operator = np.less
+            self.sort = 'inc'
+
+        if isinstance(scoreboard, Scoreboard):
+            self.scoreboard = scoreboard
+        else:
+            if isinstance(scoreboard, Path):
+                self.scoreboard_file = scoreboard
+            elif isinstance(scoreboard, str):
+                if 'scoreboard' in scoreboard:
+                    self.scoreboard_file = Path(scoreboard)
+                else:
+                    self.scoreboard_file = pdir.models/f'scoreboard-{scoreboard}.pkl'
+            self.sb_len = config.scoreboard.len
+            self.scoreboard = Scoreboard(self.scoreboard_file, self.sb_len, sort=self.sort)
+
+        self.patience = config.train.patience
+        self.wait = 0
+
+        #self.cal_score = None
+        if config.train.cal_score == 'mapk_known':
+            self.score_idx = 5
+        elif config.train.cal_score == 'mapk_all':
+            self.score_idx = 3
+
+    def jump_to_epoch(self, epoch:int)->None:
+        try:
+            self.learn.load(f'{self.name}_{epoch}', purge=False)
+            print(f"Loaded {self.name}_{epoch}")
+        except: print(f'Model {self.name}_{epoch} not found.')
+
+    def write_tblog(self, scores, step):
+        self.config.env.tblog.add_scalar('vld_loss', scores[0], step)
+        self.config.env.tblog.add_scalars('accuracy', {'known': scores[3], 'all': scores[1]}, step)
+        self.config.env.tblog.add_scalars('mapk', {'known': scores[4], 'all': scores[2]}, step)
+
+    #def on_batch_end(self, **kwargs:Any)->None:
+    #    pass
+
+    #def on_batch_end(self, last_loss, epoch, num_batch, **kwargs: Any) -> None:
+    def on_epoch_end(self, epoch, logs=None):
+        #if epoch == 20:
+        #    self.config.env.plog.info('@@@@@@@@@@@@@@@@@@@@@@ unfreezing all parameters @@@@@@@@@@@@@@@@@@@@@@@')
+        #    self.learn.unfreeze()
+        #    self.learn.clip_grad(1.0)
+
+        #cal score
+        #preds, y = predict_mixhead(self.learn.model, self.learn.data.valid_dl)
+        #score = self.cal_score(preds, y)
+        #print(f'score = {score}')
+
+        #compare and store to scoreboard
+        trn_loss = np.array(self.learn.recorder.losses)[-50:].mean()
+        #trn_loss = np.array(self.learn.recorder.losses).mean()
+
+        #vld_loss = self.learn.recorder.val_losses[0]
+        #metrics = np.array(self.learn.recorder.metrics[0])
+        #self.config.env.plog.info(f'[epoch {epoch}] [{trn_loss} {vld_loss} {metrics}]')
+        #score = metrics[self.score_idx]
+        #print(f'score = {score}, best_score = {self.best_score}')
+
+        "Compare the value monitored to its best score and maybe save the model."
+        if self.monitor == 'val_loss':
+            score = self.get_monitor_value()
+        else:  #map score
+            scores = self.learn.validate(self.learn.data.valid_dl)
+            scores = np.array([trn_loss] + scores)
+            #clear_scores = []
+            #for s in scores:
+            #    if isinstance(s, torch.FloatTensor):
+            #        clear_scores.append(s.item())
+            #    else:
+            #        clear_scores.append(s)
+            if self.config.env.with_tblog:
+                self.write_tblog(scores, epoch)
+            self.config.env.plog.info(f'[epoch {epoch}] {scores}')
+            score = scores[self.score_idx]
+            print(f'score = {score}, best_score = {self.best_score}')
+
+        # early stopping
+        if score is None: return
+        #if score > self.best_score:
+        if self.operator(score, self.best_score):
+            self.best_score,self.wait = score,0
+            print(f'Update best_score to: {self.best_score}')
+            self.config.env.plog.info('$$$$$$$$$$$$$ Find best score {} at training step {} $$$$$$$$$'.format(score, epoch))
+        else:
+            self.wait += 1
+            print(f'wait={self.wait}, patience={self.patience}')
+            if self.wait > self.patience:
+                print(f'Epoch {epoch}: early stopping')
+                return {"stop_training":True}
+
+        #scoreboard
+        #if len(self.scoreboard) == 0 or score > self.scoreboard[-1][0]:
+        if not self.scoreboard.is_full() or self.operator(score, self.scoreboard[-1]['score']):
+            store_file = f'{self.prefix}-{epoch}'
+            save_path = self.learn.save(store_file, return_path=True, with_opt=True)
+            print('$$$$$$$$$$$$$ Good score {} at training step {} $$$$$$$$$'.format(score, epoch))
+            print(f'save to {save_path}')
+            update_dict = {'score': score,
+                           'epoch': epoch,
+                           'timestamp': start_timestamp,
+                           'config': self.config,
+                           'file': save_path
+                           }
+            self.scoreboard.update(update_dict)
+        self.config.env.plog.info('\n')
+
+    def on_train_end(self, **kwargs):
+        self.config.env.plog.info('$$$$$$$$$$$$$$$$$$$$ Final best score {} $$$$$$$$$$$$$$$$$$$$$'.format(self.best_score))
+        plog_file = self.config.env.pdir.log/f'{self.config.env.timestamp}_{self.config.task.prefix}.log'
+        plog_file.rename(self.config.env.pdir.log/f'{self.config.env.timestamp}_{self.config.task.prefix}_{str(int(self.best_score*100000))}.log')
+        "Load the best model."
+        #print('tmp saving model to linshi')
+        #self.learn.save(f'linshi')
+        if len(self.scoreboard):
+            self.learn.load(self.scoreboard[0]['file'].name[:-4], purge=False)
+            self.learn.export(f'{self.prefix}.pkl')

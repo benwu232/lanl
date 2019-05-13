@@ -154,6 +154,8 @@ class Scoreboard():
         #remove useless files
         if len(self.sb) > self.sb_len:
             del_file = self.sb[-1]['file']
+            if isinstance(del_file, str):
+                del_file = Path(del_file)
             if del_file.is_file():
                 del_file.unlink()
         self.sb = self.sb[:self.sb_len]

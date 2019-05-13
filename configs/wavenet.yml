@@ -12,7 +12,7 @@ env:
   root_path: '/media/wb/backup/work/LANL-Earthquake-Prediction'
   data_path: ~
   with_log: 1
-  with_tblog: 0
+  with_tblog: 1
 
 model:
   name: 'WaveNet'
@@ -40,7 +40,7 @@ model:
   wn_dropout: 0.0
   #norm_type: 'batch_norm'
   norm_type: 'none'
-  fc_dropout: 0.5
+  fc_dropout: 0.0
   use_weight_norm: False
 
 opt:
@@ -96,5 +96,5 @@ loss:
 
 scoreboard:
   len: 11
-  sort: 'dec'
+  sort: 'inc'
 
