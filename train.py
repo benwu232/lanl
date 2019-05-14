@@ -102,7 +102,8 @@ def run(config):
         model = sel_model(config.model)
         model_name = config.model.name
         model.compile(loss='mean_absolute_error', optimizer='adam')
-    model.summary()
+    model.summary(print_fn=config.env.plog.info)
+    print_log(id)
 
     tb_cb = keras.callbacks.TensorBoard(log_dir=str(config.env.pdir.tblog/f'{config.env.timestamp}_{config.name}'), histogram_freq=0, write_graph=True, write_images=False)
 
