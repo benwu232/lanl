@@ -110,7 +110,9 @@ def WaveNet(pars):
 
     def wavenet_blk(x):
         original_x = x
+        x = keras.layers.BatchNormalization(axis=-1)(x)
         x = keras.layers.Dropout(pars.wn_dropout)(x)
+
         tanh_out = CausalConv1D(pars.n_filters, 2, dilation_rate=2 ** i, padding='valid', causal=True,
                                 use_bias=pars.use_bias,
                                 name='dilated_conv_%d_tanh_s%d' % (2 ** i, s), activation='tanh',
