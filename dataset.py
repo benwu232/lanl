@@ -187,7 +187,7 @@ def load_test(pdir, ts_length=150000):
     for f in test_files:
         ids.append(f.stem)
         t_df = pd.read_csv(f, dtype={"acoustic_data": np.int8})
-        ts[i, :] = t_df['acoustic_data'].values
+        ts[i, :] = t_df['acoustic_data'].values[-ts_length:]
         i = i + 1
 
     return ts, ids

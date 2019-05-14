@@ -32,7 +32,7 @@ def run(config):
     print_log = partial(log_print, config=config)
     print_log(pprint.pformat(config))
 
-    id = f'{config.name}_{config.model.name}_{config.model.n_filters}_s[{config.model.stacks}]_wnd[{config.model.wn_dropout}]_fcd[{config.model.fc_dropout}]_l2[{config.model.l2_factor}]_{config.model.merge_type}'
+    id = get_id(config)
 
     scoreboard_file = config.env.pdir.models/f'scoreboard-{id}.pkl'
     scoreboard = Scoreboard(scoreboard_file,

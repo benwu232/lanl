@@ -20,6 +20,9 @@ def load_config(config_file):
         yaml_config = EasyDict(yaml.load(fid))
     return yaml_config
 
+def get_id(config):
+    return f'{config.name}_{config.model.name}_{config.model.n_filters}_s[{config.model.stacks}]_wnd[{config.model.wn_dropout}]_fcd[{config.model.fc_dropout}]_l2[{config.model.l2_factor}]_{config.model.merge_type}'
+
 def now2str(format="%Y-%m-%d__%H-%M-%S"):
     # str_time = time.strftime("%Y-%b-%d-%H-%M-%S", time.localtime(time.time()))
     return dt.datetime.now().strftime(format)

@@ -29,46 +29,12 @@ from model_kr import *
 
 def run(config):
     config.env.update(init_env(config))
+    id = get_id(config)
 
-    if config.DBG:
-        nrows = 30_000_000
-        df = pd.read_csv(config.env.pdir.data/'train.csv', nrows=nrows, dtype={'acoustic_data': np.int16, 'time_to_failure': np.float64})
-    else:
-        df = load_dump(config.env.pdir.data/f'train_df.pkl')
-    #extend_df(df)
-    #vld_range = split_ds(df)
-    ds_len = len(df)
+    real_seq_len = (config.raw_len // config.seq_len) * config.seq_len
+    test_data, test_ids = load_test(config.env.pdir, real_seq_len)
 
-    X_train = df.acoustic_data.values
-    y_train = df.time_to_failure.values
-
-    config.seg_spans = segment_df(df, config.raw_len)
-    config.n_seg = len(config.seg_spans)
-    config.trn_seg = list(set(range(config.n_seg)) - set(config.vld_seg))
-
-    x_sum = 0.
-    count = 0
-
-    for s in config.trn_seg:
-        x_sum += X_train[config.seg_spans[s][0]:config.seg_spans[s][1]].sum()
-        count += (config.seg_spans[s][1] - config.seg_spans[s][0])
-
-    X_train_mean = x_sum/count
-
-    x2_sum = 0.
-    for s in config.trn_seg:
-        x2_sum += np.power(X_train[config.seg_spans[s][0]:config.seg_spans[s][1]] - X_train_mean, 2).sum()
-
-    X_train_std = np.sqrt(x2_sum/count)
-
-    print(X_train_mean, X_train_std)
-
-
-    test_data, test_ids = load_test(config.env.pdir)
-
-    X_test = ((test_data - X_train_mean)/ X_train_std).astype('float32')
-    X_test = np.expand_dims(X_test, 2)
-    X_test.shape
+    X_test = np.expand_dims(test_data, 2)
 
     model_name = 'rnn_cnn'
     model = load_model(str(config.env.pdir.models/f'{model_name}.h5'))
@@ -78,8 +44,7 @@ def run(config):
 
     submission_df = pd.DataFrame({'seg_id': test_ids, 'time_to_failure': y_pred[:, 0]})
 
-    submission_df.to_csv(str(config.env.pdir.models/"submission.csv"), index=False)
-
+    submission_df.to_csv(str(config.env.pdir.models/f"{id}_submission.csv"), index=False)
 
 
 
