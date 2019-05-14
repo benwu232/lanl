@@ -29,19 +29,19 @@ model:
   kernel_size: 2
   in_features: 36
   #n_features: 512
-  n_filters: 48
+  n_filters: 32
   use_bias: True
-  #l2_factor: !!float 1e-4
-  l2_factor: 0.0
+  l2_factor: !!float 1e-4
+  #l2_factor: 0.0
   final_l2_factor: 0.0
-  n_out_filters: 40
+  n_out_filters: 16
   merge_type: 'add'
   #merge_type: 'concat'
 
   wn_dropout: 0.0
   norm_type: 'batch_norm'
   #norm_type: 'none'
-  fc_dropout: 0.0
+  fc_dropout: 0.5
   use_weight_norm: False
 
 opt:
@@ -57,7 +57,7 @@ trn:
   #pretrained_file: 'CosNet-known-densenet121-best'
   #pretrained_file: 'CosNet-known-densenet121-8'
   batch_size: 64
-  batches_per_epoch: 500
+  batches_per_epoch: 250
   n_epoch: 600
   patience: 30
   balance: 0
@@ -71,7 +71,7 @@ trn:
 
 vld:
   batch_size: 64
-  batches_per_epoch: 400
+  batches_per_epoch: 100
 
 ds:
   vld_seg: [13, 14, 15]

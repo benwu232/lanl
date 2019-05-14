@@ -109,9 +109,10 @@ def run(config):
 
     cbs=[
         keras.callbacks.CSVLogger(str(config.env.pdir.log/f'{config.env.timestamp}_{config.name}.csv'), append=True),
-        EarlyStopping(monitor='val_loss', patience=config.trn.patience, verbose=1),
+        #EarlyStopping(monitor='val_loss', patience=config.trn.patience, verbose=1),
         ManagerCb(scoreboard, monitor='val_loss', patience=config.trn.patience, id=id, mode=config.scoreboard.sort, config=config, verbose=1),
-        ModelCheckpoint(filepath=str(config.env.pdir.models / f'{model_name}.h5'), monitor='val_loss', save_best_only=True, verbose=1)]
+        #ModelCheckpoint(filepath=str(config.env.pdir.models / f'{model_name}.h5'), monitor='val_loss', save_best_only=True, verbose=1)
+    ]
 
     if config.env.with_tblog:
         cbs.append(tb_cb)

@@ -366,7 +366,7 @@ class ManagerCb(keras.callbacks.Callback):
                     self.model.set_weights(self.best_weights)
 
         if not self.scoreboard.is_full() or self.monitor_op(current, self.scoreboard[-1]['score']):
-            store_file = f'{self.id}-{epoch}'
+            store_file = f'{self.id}-{epoch}.h5'
             save_path = str(self.config.env.pdir.models/store_file)
 
             self.model.save(save_path, overwrite=True)
