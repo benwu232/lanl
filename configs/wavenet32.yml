@@ -29,19 +29,19 @@ model:
   kernel_size: 2
   in_features: 36
   #n_features: 512
-  n_filters: 16
+  n_filters: 32
   use_bias: True
-  #l2_factor: !!float 1e-4
-  l2_factor: 0.0
+  l2_factor: !!float 1e-4
+  #l2_factor: 0.0
   final_l2_factor: 0.0
-  n_out_filters: 8
+  n_out_filters: 16
   merge_type: 'add'
   #merge_type: 'concat'
 
   wn_dropout: 0.0
   norm_type: 'batch_norm'
   #norm_type: 'none'
-  fc_dropout: 0.0
+  fc_dropout: 0.5
   use_weight_norm: False
 
 opt:

@@ -82,7 +82,7 @@ class EarthQuakeRandom(keras.utils.Sequence):
     def __len__(self):
         return self.steps_per_epoch
 
-    def __getitem__(self, idx):
+    def __getitem__3(self, idx):
         segment_index = np.random.choice(self.segments, p=self.segments_p)
         end_indexes = np.random.randint(self.seg_spans[segment_index][0] + self.ts_length, self.seg_spans[segment_index][1], size=self.batch_size)
 
@@ -91,19 +91,36 @@ class EarthQuakeRandom(keras.utils.Sequence):
 
         for i, end in enumerate(end_indexes):
             x_batch[i, :] = self.x[end - self.real_len: end]
-            y_batch[i] = self.y[end - ]
+            y_batch[i] = self.y[end - 1]
 
         x_batch = np.expand_dims(x_batch, axis=2)
-        mean = x_batch.mean(axis=1, keepdims=True)
-        std = x_batch.std(axis=1, keepdims=True)
-        x_scaled = (x_batch - mean) / std
-        mean_ex = mean.repeat(self.real_len, axis=1)
-        std_ex = std.repeat(self.real_len, axis=1)
-        x_batch = np.concatenate([x_scaled, mean_ex, std_ex], axis=-1)
+        x_mean = x_batch.mean(axis=1, keepdims=True)
+        x_std = x_batch.std(axis=1, keepdims=True)
+        x_scaled = (x_batch - x_mean) / x_std
+        x_mean_ex = x_mean.repeat(self.real_len, axis=1)
+        x_std_ex = x_std.repeat(self.real_len, axis=1)
+
+        envelope = get_envelope(x_batch)
+        e_mean = envelope.mean(axis=1, keepdims=True)
+        e_std = envelope.std(axis=1, keepdims=True)
+        e_scaled = (envelope - e_mean) / e_std
+        e_mean_ex = e_mean.repeat(self.real_len, axis=1)
+        e_std_ex = e_std.repeat(self.real_len, axis=1)
+
+        dist = get_dist(x_batch)
+        d_mean = dist.mean(axis=1, keepdims=True)
+        d_std = dist.std(axis=1, keepdims=True)
+        d_scaled = (dist - d_mean) / d_std
+        d_mean_ex = d_mean.repeat(self.real_len, axis=1)
+        d_std_ex = d_std.repeat(self.real_len, axis=1)
+
+
+
+        x_batch = np.concatenate([x_scaled, x_mean_ex, x_std_ex, e_scaled, e_mean_ex, e_std_ex, d_scaled, d_mean_ex, d_std_ex], axis=-1)
 
         return x_batch, y_batch
 
-    def __getitem__3(self, idx):
+    def __getitem__(self, idx):
         segment_index = np.random.choice(self.segments, p=self.segments_p)
         end_indexes = np.random.randint(self.seg_spans[segment_index][0] + self.ts_length, self.seg_spans[segment_index][1], size=self.batch_size)
 
