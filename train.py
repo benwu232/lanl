@@ -26,40 +26,6 @@ from framework import *
 from wavenet import *
 from model_kr import *
 
-def cal_basic_features(x, config):
-    x_sum = 0.
-    count = 0
-
-    for s in config.ds.trn_seg:
-        x_sum += x[config.ds.seg_spans[s][0]:config.ds.seg_spans[s][1]].sum()
-        count += (config.ds.seg_spans[s][1] - config.ds.seg_spans[s][0])
-
-    x_mean = x_sum / count
-
-    x2_sum = 0.
-    for s in config.ds.trn_seg:
-        x2_sum += np.power(x[config.ds.seg_spans[s][0]:config.ds.seg_spans[s][1]] - x_mean, 2).sum()
-
-    x_std = np.sqrt(x2_sum / count)
-
-    #x_mean = x.mean()
-    #x_std = x.std()
-    x = np.asarray((x - x_mean) / x_std, dtype=np.float32)
-
-    envelope_file = str(config.env.pdir.data/'envelope.npy')
-    if Path(envelope_file).exists():
-        envelope = np.asarray(np.load(envelope_file), dtype=np.float32)
-    else:
-        envelope = np.zeros_like(x)
-        step = 1000000
-        for k in range(0, len(x), step):
-            #print(k)
-            envelope[k:k+step] = get_envelope(x[k:k+step])
-        #np.savez_compressed(envelope_file, envelope)
-        np.save(envelope_file, envelope)
-    dist = get_dist(x)
-    return x, envelope, dist, x_mean, x_std
-
 
 def run(config):
     config.env.update(init_env(config))
