@@ -98,17 +98,20 @@ def linear_decay(step, pars):
 
 class BaseDirs():
     #def __init__(self, root_path='/media/wb/backup/work/whale', data_path='input'):
-    def __init__(self, root_path, data_path=None):
+    def __init__(self, root_path, input_data=None):
         if root_path == '':
             self.root = Path().resolve().parent
         else:
             self.root = Path(root_path)
         self.root.mkdir(exist_ok=True)
 
-        if data_path is None:
-            self.data = self.root/'input'
+        if input_data is None:
+            self.input = self.root / 'input'
         else:
-            self.data = Path(data_path)
+            self.input = Path(input_data)
+        self.input.mkdir(exist_ok=True)
+
+        self.data = self.root/'data'
         self.data.mkdir(exist_ok=True)
 
         self.models = self.root/'models'

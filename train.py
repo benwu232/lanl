@@ -41,10 +41,10 @@ def run(config):
 
     if config.DBG:
         nrows = 30_000_000
-        df = pd.read_csv(config.env.pdir.data / 'train.csv', nrows=nrows,
+        df = pd.read_csv(config.env.pdir.input_data/'train.csv', nrows=nrows,
                          dtype={'acoustic_data': np.int16, 'time_to_failure': np.float64})
     else:
-        df = load_dump(config.env.pdir.data / f'train_df.pkl')
+        df = load_dump(config.env.pdir.data/f'train_df.pkl')
 
     X_train = df.acoustic_data.values
     y_train = df.time_to_failure.values
