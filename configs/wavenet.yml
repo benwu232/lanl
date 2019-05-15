@@ -29,12 +29,12 @@ model:
   kernel_size: 2
   in_features: 36
   #n_features: 512
-  n_filters: 16
+  n_filters: 8
   use_bias: True
   #l2_factor: !!float 1e-4
   l2_factor: 0.0
   final_l2_factor: 0.0
-  n_out_filters: 8
+  n_out_filters: 1
   merge_type: 'add'
   #merge_type: 'concat'
 
@@ -59,7 +59,7 @@ trn:
   batch_size: 64
   batches_per_epoch: 250
   n_epoch: 600
-  patience: 30
+  patience: 60
   balance: 0
   method: 1
   true_wd: True
