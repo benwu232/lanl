@@ -91,6 +91,27 @@ class EarthQuakeRandom(keras.utils.Sequence):
 
         for i, end in enumerate(end_indexes):
             x_batch[i, :] = self.x[end - self.real_len: end]
+            y_batch[i] = self.y[end - ]
+
+        x_batch = np.expand_dims(x_batch, axis=2)
+        mean = x_batch.mean(axis=1, keepdims=True)
+        std = x_batch.std(axis=1, keepdims=True)
+        x_scaled = (x_batch - mean) / std
+        mean_ex = mean.repeat(self.real_len, axis=1)
+        std_ex = std.repeat(self.real_len, axis=1)
+        x_batch = np.concatenate([x_scaled, mean_ex, std_ex], axis=-1)
+
+        return x_batch, y_batch
+
+    def __getitem__3(self, idx):
+        segment_index = np.random.choice(self.segments, p=self.segments_p)
+        end_indexes = np.random.randint(self.seg_spans[segment_index][0] + self.ts_length, self.seg_spans[segment_index][1], size=self.batch_size)
+
+        x_batch = np.empty((self.batch_size, self.real_len))
+        y_batch = np.empty(self.batch_size, )
+
+        for i, end in enumerate(end_indexes):
+            x_batch[i, :] = self.x[end - self.real_len: end]
             y_batch[i] = self.y[end - 1]
 
         x_batch = np.expand_dims(x_batch, axis=2)
@@ -118,20 +139,6 @@ class EarthQuakeRandom(keras.utils.Sequence):
 
         return np.expand_dims(x_batch, axis=2), y_batch
 
-    def __getitem__1(self, idx):
-        segment_index = np.random.choice(self.segments, p=self.segments_p)
-        end_indexes = np.random.randint(self.seg_spans[segment_index][0] + self.ts_length, self.seg_spans[segment_index][1], size=self.batch_size)
-
-        x_batch = np.empty((self.batch_size, self.ts_length))
-        y_batch = np.empty(self.batch_size, )
-
-        for i, end in enumerate(end_indexes):
-            x_batch[i, :] = self.x[end - self.ts_length: end]
-            y_batch[i] = self.y[end - 1]
-
-        x_batch = (x_batch - self.x_mean) / self.x_std
-
-        return np.expand_dims(x_batch, axis=2), y_batch
 
 
 class QuakeDataSet(Dataset):
