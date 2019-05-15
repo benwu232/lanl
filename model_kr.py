@@ -114,14 +114,14 @@ def WaveNet(pars):
         if pars.norm_type == 'batch_norm':
             x = keras.layers.Dropout(pars.wn_dropout)(x)
 
-        tanh_out = CausalConv1D(pars.n_filters, pars.kernel_size, dilation_rate=2 ** i, padding='valid', causal=True,
+        tanh_out = CausalConv1D(pars.n_filters, pars.kernel_size, dilation_rate=pars.dilation_base ** i, padding='valid', causal=True,
                                 use_bias=pars.use_bias,
-                                name='dilated_conv_%d_tanh_s%d' % (2 ** i, s), activation='tanh',
+                                name='dilated_conv_%d_tanh_s%d' % (pars.dilation_base ** i, s), activation='tanh',
                                 bias_regularizer=l2(pars.l2_factor),
                                 kernel_regularizer=l2(pars.l2_factor))(x)
-        sigm_out = CausalConv1D(pars.n_filters, pars.kernel_size, dilation_rate=2 ** i, padding='valid', causal=True,
+        sigm_out = CausalConv1D(pars.n_filters, pars.kernel_size, dilation_rate=pars.dilation_base ** i, padding='valid', causal=True,
                                 use_bias=pars.use_bias,
-                                name='dilated_conv_%d_sigm_s%d' % (2 ** i, s), activation='sigmoid',
+                                name='dilated_conv_%d_sigm_s%d' % (pars.dilation_base ** i, s), activation='sigmoid',
                                 bias_regularizer=l2(pars.l2_factor),
                                 kernel_regularizer=l2(pars.l2_factor))(x)
         x = keras.layers.Multiply(name='gated_activation_%d_s%d' % (i, s))([tanh_out, sigm_out])
