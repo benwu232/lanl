@@ -50,7 +50,9 @@ def extend_df(df):
 class EarthQuakeRandom(keras.utils.Sequence):
 
     def __init__(self, x, y, segments, seg_spans, ts_length, batch_size, steps_per_epoch, pars):
-        self.x = x
+        self.x = x[0]
+        self.envelope = x[1]
+        self.dist = x[2]
         self.y = y
         self.segments = segments
         self.seg_spans = seg_spans
@@ -59,6 +61,7 @@ class EarthQuakeRandom(keras.utils.Sequence):
         self.steps_per_epoch = steps_per_epoch
         self.segments_size = np.array([self.seg_spans[s][1] - self.seg_spans[s][0] for s in segments])
         self.segments_p = self.segments_size / self.segments_size.sum()
+        self.config = pars
         self.raw_len = pars.raw_len
         self.seq_len = pars.seq_len
         self.seg_len = self.raw_len // self.seq_len
@@ -82,45 +85,7 @@ class EarthQuakeRandom(keras.utils.Sequence):
     def __len__(self):
         return self.steps_per_epoch
 
-    def __getitem__3(self, idx):
-        segment_index = np.random.choice(self.segments, p=self.segments_p)
-        end_indexes = np.random.randint(self.seg_spans[segment_index][0] + self.ts_length, self.seg_spans[segment_index][1], size=self.batch_size)
-
-        x_batch = np.empty((self.batch_size, self.real_len))
-        y_batch = np.empty(self.batch_size, )
-
-        for i, end in enumerate(end_indexes):
-            x_batch[i, :] = self.x[end - self.real_len: end]
-            y_batch[i] = self.y[end - 1]
-
-        x_batch = np.expand_dims(x_batch, axis=2)
-        x_mean = x_batch.mean(axis=1, keepdims=True)
-        x_std = x_batch.std(axis=1, keepdims=True)
-        x_scaled = (x_batch - x_mean) / x_std
-        x_mean_ex = x_mean.repeat(self.real_len, axis=1)
-        x_std_ex = x_std.repeat(self.real_len, axis=1)
-
-        envelope = get_envelope(x_batch)
-        e_mean = envelope.mean(axis=1, keepdims=True)
-        e_std = envelope.std(axis=1, keepdims=True)
-        e_scaled = (envelope - e_mean) / e_std
-        e_mean_ex = e_mean.repeat(self.real_len, axis=1)
-        e_std_ex = e_std.repeat(self.real_len, axis=1)
-
-        dist = get_dist(x_batch)
-        d_mean = dist.mean(axis=1, keepdims=True)
-        d_std = dist.std(axis=1, keepdims=True)
-        d_scaled = (dist - d_mean) / d_std
-        d_mean_ex = d_mean.repeat(self.real_len, axis=1)
-        d_std_ex = d_std.repeat(self.real_len, axis=1)
-
-
-
-        x_batch = np.concatenate([x_scaled, x_mean_ex, x_std_ex, e_scaled, e_mean_ex, e_std_ex, d_scaled, d_mean_ex, d_std_ex], axis=-1)
-
-        return x_batch, y_batch
-
-    def __getitem__(self, idx):
+    def __getitem__1(self, idx):
         segment_index = np.random.choice(self.segments, p=self.segments_p)
         end_indexes = np.random.randint(self.seg_spans[segment_index][0] + self.ts_length, self.seg_spans[segment_index][1], size=self.batch_size)
 
@@ -141,20 +106,20 @@ class EarthQuakeRandom(keras.utils.Sequence):
 
         return x_batch, y_batch
 
-    def __getitem__2(self, idx):
+    def __getitem__(self, idx):
         segment_index = np.random.choice(self.segments, p=self.segments_p)
         end_indexes = np.random.randint(self.seg_spans[segment_index][0] + self.ts_length, self.seg_spans[segment_index][1], size=self.batch_size)
 
-        x_batch = np.empty((self.batch_size, self.real_len))
+        x_batch = np.empty((self.batch_size, self.real_len, 3))
         y_batch = np.empty(self.batch_size, )
 
         for i, end in enumerate(end_indexes):
-            x_batch[i, :] = self.x[end - self.real_len: end]
+            x_batch[i, :, 0] = self.x[end - self.real_len: end]
+            x_batch[i, :, 1] = self.envelope[end - self.real_len: end]
+            x_batch[i, :, 2] = self.dist[end - self.real_len: end]
             y_batch[i] = self.y[end - 1]
 
-        x_batch = (x_batch - self.x_mean) / self.x_std
-
-        return np.expand_dims(x_batch, axis=2), y_batch
+        return x_batch, y_batch
 
 
 
