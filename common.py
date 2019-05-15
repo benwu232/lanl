@@ -249,7 +249,7 @@ def init_env(config):
     env = EasyDict()
     env.timestamp = now2str()
     if 'root_path' in config.env:
-        env.pdir = BaseDirs(config.env.root_path, config.env.data_path)
+        env.pdir = BaseDirs(config.env.root_path, config.env.input_data)
         pdir = env.pdir
         #name = f'{env.timestamp}-{config.task.name}'
 
