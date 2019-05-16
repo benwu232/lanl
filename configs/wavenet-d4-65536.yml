@@ -1,0 +1,102 @@
+
+name: 'lanl'
+DBG: 0
+n_process: 2
+
+
+raw_len: &raw_len 150_000
+seq_len: &seq_len 65536
+vld_idx: 0
+
+env:
+  root_path: '/media/wb/backup/work/LANL-Earthquake-Prediction'
+  input_data: ~
+  with_log: 1
+  with_tblog: 1
+
+model:
+  name: 'WaveNet'
+  #model_file: 'WaveNet.h5'
+  legacy: False
+  seq_len: *seq_len
+  raw_len: *raw_len
+  shrinked_len: 50
+  stacks: 1
+  #layers: 26
+  #layers_per_stack: 10
+  layers_per_stack: 8
+  #layers_per_stack: 13
+  kernel_size: &kernel_size 4
+  dilation_base: *kernel_size
+  in_features: 36
+  #n_features: 512
+  n_filters: 32
+  n_out_filters: 16
+  use_bias: True
+  #l2_factor: !!float 1e-4
+  l2_factor: 0.0
+  final_l2_factor: 0.0
+  merge_type: 'add'
+  #merge_type: 'concat'
+
+  wn_dropout: 0.0
+  norm_type: 'batch_norm'
+  #norm_type: 'none'
+  fc_dropout: 0.0
+  use_weight_norm: False
+
+opt:
+  type: 'Adam'
+  lr: !!float 1e-3
+  beta1: 0.9
+  beta2: 0.999
+  weight_decay: !!float 1e-4
+  epsilon: !!float 1e-8
+
+trn:
+  #pretrained_file: 'Arc_11'
+  #pretrained_file: 'CosNet-known-densenet121-best'
+  #pretrained_file: 'CosNet-known-densenet121-8'
+  batch_size: 64
+  batches_per_epoch: 250
+  n_epoch: 10000
+  patience: 100
+  balance: 0
+  method: 1
+  true_wd: True
+  wd: !!float 1e-2
+  max_lr: !!float 1e-3
+  #true_wd: False
+  #wd: !!float 3e-5
+  find_lr: 0
+
+vld:
+  batch_size: 64
+  batches_per_epoch: 100
+
+ds:
+  vld_seg: [13, 14, 15]
+  fix_seed: 1
+  k_fold: 5
+  fold: 4
+  raw_len: *raw_len
+  seq_len: *seq_len
+
+loss:
+  name: 'MAE'
+  reduction: 'mean'
+
+
+
+#transform:
+#  name: 'align_transform'
+#  num_preprocessor: 6
+#  params:
+#    size: 320
+#    align: True
+#    align_p: 0.5
+
+scoreboard:
+  len: 11
+  sort: 'inc'
+
