@@ -80,6 +80,126 @@ def cal_basic_features(x, config):
     dist = get_dist(x)
     return x, envelope, dist, x_mean, x_std
 
+def fft_analysis(x: np.array, n=None, k=128, order=False) -> np.array:
+    """
+    Perform an FFT op on a block of data.
+
+    Returns a tensor with shape (k, 3) where
+      0 - frequency
+      1 - amplitude
+      2 - phase
+    """
+    if x.ndim > 1:
+        x = x.reshape(-1)
+    if n is None:
+        n = x.size
+    yf = np.fft.fft(x, n) * 1/n
+    yf = yf[:n//2]
+    if order:
+        sig = np.argsort(np.abs(yf))[-k:][::-1]
+    else:
+        sig = np.argpartition(np.abs(yf), -k)[-k:]
+    Y = np.empty((k, 3))
+    Y[:, 0] = sig # frequencies
+    yf_sig = yf[sig]
+    Y[:, 1] = 2.0 * np.abs(yf_sig) # amplitude
+    Y[:, 2] = np.angle(yf_sig) # phase
+    return Y
+
+def feature_gen(x: np.array, strides=512, k=128) -> np.array:
+  """
+  Given data block of 150_000 values, generate a set of 4k windows over the
+  data and get its FFT data.
+  """
+  WINDOW = 4 * 1024
+  data = []
+  for i in range(x.shape[0] // strides):
+    begin = i * strides
+    end = begin + WINDOW
+    data.append(fft_analysis(x[begin:end], k=k))
+  return np.stack(data)
+
+
+class Generator(keras.utils.Sequence):
+  sample_size = 150_000
+  STRIDES = 2 * 1024
+  NDIMS = 128
+  STEPS = sample_size // STRIDES
+
+  def __init__(self, df, indices, batch_size=32):
+    self.dataframe = df
+    self.indices = indices
+    self.batch_size = batch_size
+
+  def __len__(self):
+    return int((self.indices.shape[0] - 1) / self.batch_size) + 1
+
+  def __getitem__(self, index: int):
+    s_begin = index * self.batch_size
+    s_end = min(s_begin + self.batch_size, self.indices.shape[0])
+
+    X_list = []
+    y = np.empty((s_end - s_begin))
+    for m in range(s_begin, s_end):
+        begin = self.indices[m] * self.sample_size
+        end = begin + self.sample_size
+        X_list.append(
+            feature_gen(self.dataframe['acoustic_data'].values[begin:end],
+                        strides=Generator.STRIDES, k=Generator.NDIMS)
+        )
+        y[m - s_begin] = self.dataframe['time_to_failure'].iloc[end - 1]
+
+    X = np.stack(X_list)
+    return X, y
+
+class FeatureGenerator(keras.utils.Sequence):
+    sample_size = 150_000
+    STRIDES = 4 * 1024
+    NDIMS = 512
+    STEPS = sample_size // STRIDES
+
+    def __init__(self, df, indices, batch_size=32):
+        self.dataframe = df
+        self.indices = indices
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return int((self.indices.shape[0] - 1) / self.batch_size) + 1
+
+    @classmethod
+    def generate(self, x):
+        """
+        Return the applitude of the first NDIMS frequencies
+        """
+        WINDOW = 4 * 1024
+        data = []
+        for i in range(FeatureGenerator.STEPS):
+            begin = i * FeatureGenerator.STRIDES
+            end = begin + WINDOW
+            wndn = x[begin:end]
+            n = wndn.size
+            yf = np.fft.fft(wndn, n) * 1/n
+            yf = yf[:FeatureGenerator.NDIMS]
+            data.append(2.0 * np.abs(yf))
+        return np.stack(data)
+
+
+    def __getitem__(self, index: int):
+        s_begin = index * self.batch_size
+        s_end = min(s_begin + self.batch_size, self.indices.shape[0])
+
+        X_list = []
+        y = np.empty((s_end - s_begin))
+        for m in range(s_begin, s_end):
+            begin = self.indices[m] * self.sample_size
+            end = begin + self.sample_size
+            X_list.append(
+                FeatureGenerator.generate(self.dataframe['acoustic_data'].values[begin:end])
+            )
+            y[m - s_begin] = self.dataframe['time_to_failure'].iloc[end - 1]
+
+        X = np.stack(X_list)
+        return X, y
 
 class EarthQuakeRandom(keras.utils.Sequence):
 
