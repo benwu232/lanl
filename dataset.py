@@ -66,27 +66,13 @@ def cal_basic_features(x, config):
     #x_std = x.std()
     x = np.asarray((x - x_mean) / x_std, dtype=np.float32)
 
-    envelope_file = str(config.env.pdir.data/'envelope.npy')
-    if Path(envelope_file).exists():
-        envelope = np.asarray(np.load(envelope_file), dtype=np.float32)
-    else:
-        envelope = np.zeros_like(x)
-        step = 1000000
-        for k in range(0, len(x), step):
-            #print(k)
-            envelope[k:k+step] = get_envelope(x[k:k+step])
-        #np.savez_compressed(envelope_file, envelope)
-        np.save(envelope_file, envelope)
-    dist = get_dist(x)
-    return x, envelope, dist, x_mean, x_std
+    return x, x_mean, x_std
 
 
 class EarthQuakeRandom(keras.utils.Sequence):
 
     def __init__(self, x, y, segments, seg_spans, ts_length, batch_size, steps_per_epoch, pars):
         self.x = x[0]
-        self.envelope = x[1]
-        self.dist = x[2]
         self.y = y
         self.segments = segments
         self.seg_spans = seg_spans
@@ -144,13 +130,11 @@ class EarthQuakeRandom(keras.utils.Sequence):
         segment_index = np.random.choice(self.segments, p=self.segments_p)
         end_indexes = np.random.randint(self.seg_spans[segment_index][0] + self.ts_length, self.seg_spans[segment_index][1], size=self.batch_size)
 
-        x_batch = np.empty((self.batch_size, self.real_len, 3))
+        x_batch = np.empty((self.batch_size, self.real_len, 1))
         y_batch = np.empty(self.batch_size, )
 
         for i, end in enumerate(end_indexes):
             x_batch[i, :, 0] = self.x[end - self.real_len: end]
-            x_batch[i, :, 1] = self.envelope[end - self.real_len: end]
-            x_batch[i, :, 2] = self.dist[end - self.real_len: end]
             y_batch[i] = self.y[end - 1]
 
         return x_batch, y_batch

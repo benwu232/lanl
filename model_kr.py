@@ -133,7 +133,7 @@ def WaveNet(pars):
         res_x = keras.layers.Add()([original_x, res_x])
         return res_x, skip_x
 
-    input = Input(shape=(real_len, 3), name='input_seq')
+    input = Input(shape=(real_len, 1), name='input_seq')
     skip_connections = []
     x = Conv1D(pars.n_filters, kernel_size=seg_len, strides=seg_len, name='feature_reduction')(input)
 
