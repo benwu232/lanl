@@ -25,9 +25,11 @@ from dataset import *
 from framework import *
 from wavenet import *
 from model_kr import *
+from keras_utils import *
 
 
 def run(config):
+    keras_cfg(mem_frac=0.4, allow_growth=True)
     config.env.update(init_env(config))
     print_log = partial(log_print, config=config)
     print_log(pprint.pformat(config))

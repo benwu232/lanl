@@ -6,7 +6,7 @@ n_process: 2
 
 raw_len: &raw_len 150_000
 #seq_len: &seq_len 4096
-seq_len: &seq_len 512
+seq_len: &seq_len 256
 vld_idx: 0
 
 env:
@@ -25,18 +25,18 @@ model:
   stacks: 1
   #layers: 26
   #layers_per_stack: 10
-  layers_per_stack: 5
+  layers_per_stack: 4
   #layers_per_stack: 13
   kernel_size: &kernel_size 4
   dilation_base: *kernel_size
   in_features: 36
   #n_features: 512
-  n_filters: 8
+  n_filters: 16
   use_bias: True
   #l2_factor: !!float 1e-4
   l2_factor: 0.0
   final_l2_factor: 0.0
-  n_out_filters: 1
+  n_out_filters: 8
   merge_type: 'add'
   #merge_type: 'concat'
 
@@ -60,8 +60,8 @@ trn:
   #pretrained_file: 'CosNet-known-densenet121-8'
   batch_size: 64
   batches_per_epoch: 250
-  n_epoch: 600
-  patience: 60
+  n_epoch: 10000
+  patience: 100
   balance: 0
   method: 1
   true_wd: True
