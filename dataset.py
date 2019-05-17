@@ -185,7 +185,7 @@ class QuakeDataSet(Dataset):
 
 
 def load_test(pdir, ts_length=150000):
-    test_files = list((pdir.input_data/'test').glob('*.csv'))
+    test_files = list((pdir.input/'test').glob('*.csv'))
 
     ts = np.empty([len(test_files), ts_length])
     ids = []

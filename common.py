@@ -20,8 +20,14 @@ def load_config(config_file):
         yaml_config = EasyDict(yaml.load(fid))
     return yaml_config
 
-def get_id(config):
+def get_id1(config):
     return f'{config.name}_{config.model.name}_{config.model.n_filters}_s[{config.model.stacks}]_wnd[{config.model.wn_dropout}]_fcd[{config.model.fc_dropout}]_l2[{config.model.l2_factor}]_{config.model.merge_type}_{config.seq_len}'
+
+def get_id(config):
+    id = ''
+    for e in config.id:
+        id += f'{e}_'
+    return id[:-1]
 
 def now2str(format="%Y-%m-%d__%H-%M-%S"):
     # str_time = time.strftime("%Y-%b-%d-%H-%M-%S", time.localtime(time.time()))
@@ -80,6 +86,11 @@ def log_print(msg, config):
     if config.env.with_log:
         config.env.plog.info(msg)
 
+def close_logger(logger):
+    handlers = logger.handlers[:]
+    for handler in handlers:
+        handler.close()
+        logger.removeHandler(handler)
 
 def linear_decay(step, pars):
     start_value = pars[0]

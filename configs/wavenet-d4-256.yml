@@ -1,5 +1,5 @@
 
-name: 'lanl'
+name: &name 'lanl'
 DBG: 0
 n_process: 2
 
@@ -16,34 +16,34 @@ env:
   with_tblog: 1
 
 model:
-  name: 'WaveNet'
-  #model_file: 'WaveNet.h5'
+  name: &model_name 'wavenet'
+  #model_file: 'lanl_WaveNet_16_s[1]_wnd[0.95]_fcd[0.95]_l2[0.1]_add_256-195.h5'
   legacy: False
   seq_len: *seq_len
   raw_len: *raw_len
   shrinked_len: 50
-  stacks: 3
+  stacks: &stacks 1
   #layers: 26
   #layers_per_stack: 10
-  layers_per_stack: 4
+  layers_per_stack: &lps 4
   #layers_per_stack: 13
   kernel_size: &kernel_size 4
   dilation_base: *kernel_size
   in_features: 36
   #n_features: 512
-  n_filters: 32
-  n_out_filters: 16
+  n_filters: &n_filters 16
+  n_out_filters: &n_out_filters 8
   use_bias: True
-  #l2_factor: !!float 1e-4
-  l2_factor: 0.0
+  l2_factor: !!float 6e-2
+  #l2_factor: 0.0
   final_l2_factor: 0.0
   merge_type: 'add'
   #merge_type: 'concat'
 
-  wn_dropout: 0.0
+  wn_dropout: 0.95
   norm_type: 'batch_norm'
   #norm_type: 'none'
-  fc_dropout: 0.0
+  fc_dropout: 0.95
   use_weight_norm: False
 
 opt:
@@ -61,7 +61,7 @@ trn:
   batch_size: 64
   batches_per_epoch: 250
   n_epoch: 10000
-  patience: 100
+  patience: 200
   balance: 0
   method: 1
   true_wd: True
@@ -101,3 +101,13 @@ scoreboard:
   len: 11
   sort: 'inc'
 
+
+id:
+  - *name
+  - *model_name
+  - *seq_len
+  - *stacks
+  - *lps
+  - *kernel_size
+  - *n_filters
+  - *n_out_filters

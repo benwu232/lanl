@@ -30,8 +30,8 @@ model:
   dilation_base: *kernel_size
   in_features: 36
   #n_features: 512
-  n_filters: 32
-  n_out_filters: 16
+  n_filters: 8
+  n_out_filters: 4
   use_bias: True
   #l2_factor: !!float 1e-4
   l2_factor: 0.0

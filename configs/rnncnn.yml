@@ -1,5 +1,5 @@
 
-name: 'model101'
+name: 'rnncnn'
 DBG: 0
 n_process: 2
 
@@ -10,7 +10,7 @@ vld_seg: [13, 14, 15]
 
 env:
   root_path: '/media/wb/backup/work/LANL-Earthquake-Prediction'
-  data_path: ~
+  input_data: ~
   with_log: 0
   with_tblog: 0
 
@@ -74,6 +74,7 @@ vld:
   epoch_len: 2_000
 
 ds:
+  vld_seg: [13, 14, 15]
   fix_seed: 1
   k_fold: 5
   fold: 4
@@ -96,5 +97,5 @@ loss:
 
 scoreboard:
   len: 11
-  sort: 'dec'
+  sort: 'inc'
 

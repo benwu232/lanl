@@ -23,7 +23,7 @@ from common import *
 def sel_model(pars):
     if pars.name == 'RnnCnn':
         return RnnCnn(pars)
-    elif pars.name == 'WaveNet':
+    elif pars.name == 'wavenet':
         return WaveNet(pars)
 
 
@@ -78,7 +78,7 @@ class CausalConv1D(Conv1D):
             bias_regularizer=bias_regularizer,
             kernel_constraint=kernel_constraint,
             bias_constraint=bias_constraint,
-            **kwargs
+            #**kwargs
         )
 
         self.causal = causal
